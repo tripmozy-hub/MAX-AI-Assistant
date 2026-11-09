@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAX // Modern AI Voice Assistant</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes breathing {
+      0%, 100% { transform: scale(0.96); filter: drop-shadow(0 0 24px rgba(0, 229, 255, 0.45)); }
+      50% { transform: scale(1.05); filter: drop-shadow(0 0 45px rgba(0, 229, 255, 0.85)); }
+    }
+    @keyframes auraRotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes auraRotateReverse {
+      from { transform: rotate(360deg); }
+      to { transform: rotate(0deg); }
+    }
+    @keyframes rippleWave {
+      0% { r: 60px; opacity: 0.8; stroke-width: 3px; }
+      100% { r: 125px; opacity: 0; stroke-width: 1px; }
+    }
+    @keyframes pulseLed {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    @keyframes auroraDrift {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50% { transform: translate(25px, -15px) scale(1.08); }
+    }
+    .orb-breathing {
+      animation: breathing 3.6s ease-in-out infinite;
+    }
+    .aura-spin {
+      animation: auraRotate 10s linear infinite;
+    }
+    .aura-spin-reverse {
+      animation: auraRotateReverse 7s linear infinite;
+    }
+    .aurora-ambient {
+      animation: auroraDrift 8s ease-in-out infinite;
+    }
+    .ripple-1 {
+      animation: rippleWave 2.2s cubic-bezier(0.1, 0.7, 0.1, 1) infinite;
+    }
+    .ripple-2 {
+      animation: rippleWave 2.2s cubic-bezier(0.1, 0.7, 0.1, 1) infinite 0.7s;
+    }
+    .ripple-3 {
+      animation: rippleWave 2.2s cubic-bezier(0.1, 0.7, 0.1, 1) infinite 1.4s;
+    }
+    .led-pulse {
+      animation: pulseLed 1.4s ease-in-out infinite;
+    }
+    /* Hide scrollbar for clean chip rail */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#04060A] text-slate-100 antialiased p-4 flex flex-col items-center justify-center min-h-screen font-sans selection:bg-cyan-500 selection:text-black">
+
+  <!-- Top Preview Controls -->
+  <div class="mb-4 flex flex-wrap items-center justify-center gap-3 z-20">
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Face:</span>
+      <div class="bg-[#0F1420] border border-white/10 rounded-full p-1 flex items-center shadow-lg">
+        <button id="btnFaceModern" onclick="setFace('modern')" class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 shadow-[0_0_12px_rgba(0,229,255,0.3)]">
+          ✨ Fluid Orb (New)
+        </button>
+        <button id="btnFaceJarvis" onclick="setFace('jarvis')" class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-400 hover:text-white">
+          JARVIS HUD
+        </button>
+        <button id="btnFaceNeural" onclick="setFace('neural')" class="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all text-slate-400 hover:text-white">
+          Golden Core
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick State Simulation -->
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">State:</span>
+      <select id="stateSelect" onchange="setState(this.value)" class="bg-[#0F1420] border border-white/10 text-cyan-300 text-xs font-semibold rounded-full px-3 py-1.5 focus:outline-none focus:border-cyan-400">
+        <option value="ready">Ready (Idle)</option>
+        <option value="listening">Listening...</option>
+        <option value="thinking">Thinking...</option>
+        <option value="speaking">Speaking...</option>
+        <option value="muted">Muted</option>
+        <option value="stopped">Stopped</option>
+      </select>
+    </div>
+
+    <a href="/MAX.apk" class="px-4 py-1.5 rounded-full text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 text-black shadow-[0_0_16px_rgba(0,229,255,0.4)] hover:brightness-110 transition-all flex items-center gap-1.5">
+      <span>⬇️</span> Download APK
+    </a>
+  </div>
+
+  <!-- MAX Phone Mockup (Samsung Galaxy S25 Ultra Aspect) -->
+  <div class="relative w-[380px] h-[780px] bg-[#07090E] rounded-[44px] border border-white/10 shadow-[0_0_60px_rgba(0,229,255,0.15)] flex flex-col justify-between overflow-hidden select-none">
+    
+    <!-- AMOLED Ambient Aurora Bloom Background -->
+    <div class="absolute inset-0 pointer-events-none overflow-hidden">
+      <div id="auroraGlow1" class="absolute -top-20 -left-20 w-80 h-80 rounded-full bg-cyan-600/15 blur-[80px] aurora-ambient transition-all duration-700"></div>
+      <div id="auroraGlow2" class="absolute top-1/3 -right-20 w-72 h-72 rounded-full bg-blue-600/15 blur-[90px] aurora-ambient transition-all duration-700" style="animation-delay: -3s;"></div>
+      <div id="auroraGlow3" class="absolute bottom-10 left-10 w-64 h-64 rounded-full bg-indigo-600/10 blur-[80px] aurora-ambient transition-all duration-700" style="animation-delay: -5s;"></div>
+    </div>
+
+    <!-- 1. Top Bezel & Status Bar -->
+    <div class="relative z-10 w-full px-7 pt-4 flex justify-between items-center text-xs text-slate-400 font-medium">
+      <span>12:45</span>
+      <div class="w-3.5 h-3.5 rounded-full bg-black/60 border border-white/20 flex items-center justify-center">
+        <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></div>
+      </div>
+      <span>5G • 100%</span>
+    </div>
+
+    <!-- 2. Clean Modern Header -->
+    <div class="relative z-10 w-full px-5 pt-3 flex justify-between items-center">
+      <!-- Title & Live Status Pill -->
+      <div class="flex items-center gap-2.5">
+        <span class="text-xl font-bold tracking-wider text-white">MAX</span>
+        <div id="statusPill" class="px-2.5 py-1 rounded-full bg-[#131A26]/85 border border-white/10 text-xs font-medium text-slate-200 flex items-center gap-1.5 backdrop-blur-md">
+          <span id="statusLed" class="w-2 h-2 rounded-full bg-emerald-400 led-pulse"></span>
+          <span id="statusText">Ready</span>
+        </div>
+      </div>
+
+      <!-- Quick Action Pills -->
+      <div class="flex items-center gap-1.5">
+        <!-- Language Pill -->
+        <button onclick="cycleLang()" id="langBadge" class="px-2.5 py-1 rounded-xl bg-[#131A26]/85 border border-cyan-400/30 text-[11px] font-bold text-cyan-400 backdrop-blur-md hover:bg-cyan-500/10 transition-all">
+          HI
+        </button>
+
+        <!-- History Button -->
+        <button onclick="showHistory()" class="w-8 h-8 rounded-full bg-[#131A26]/85 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white backdrop-blur-md transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+        </button>
+
+        <!-- Settings Button -->
+        <button onclick="showSettings()" class="w-8 h-8 rounded-full bg-[#131A26]/85 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white backdrop-blur-md transition-all">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. Center AI Orb Section (Interactive Tap to Speak) -->
+    <div class="relative z-10 flex-1 flex flex-col justify-center items-center cursor-pointer px-4" onclick="handleOrbTap()">
+      
+      <!-- FACE 1: MODERN FLUID AI ORB (New Default) -->
+      <div id="faceModernContainer" class="relative w-64 h-64 flex items-center justify-center orb-breathing transition-all duration-500">
+        <!-- SVG Dynamic Smooth Fluid Orb -->
+        <svg class="w-full h-full" viewBox="0 0 260 260">
+          <defs>
+            <radialGradient id="fluidHalo" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#00E5FF" stop-opacity="0.38" />
+              <stop offset="50%" stop-color="#0066FF" stop-opacity="0.14" />
+              <stop offset="100%" stop-color="transparent" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient id="glossyCore" cx="42%" cy="42%" r="55%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.35" />
+              <stop offset="50%" stop-color="#071E30" stop-opacity="0.95" />
+              <stop offset="100%" stop-color="#00E5FF" stop-opacity="0.75" />
+            </radialGradient>
+            <radialGradient id="innerGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9" />
+              <stop offset="60%" stop-color="#00E5FF" stop-opacity="0.8" />
+              <stop offset="100%" stop-color="transparent" stop-opacity="0" />
+            </radialGradient>
+            <linearGradient id="auraGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00E5FF" />
+              <stop offset="50%" stop-color="#BD00FF" />
+              <stop offset="100%" stop-color="#00E5FF" />
+            </linearGradient>
+          </defs>
+
+          <!-- Outer Soft Ambient Bloom -->
+          <circle cx="130" cy="130" r="115" fill="url(#fluidHalo)" />
+
+          <!-- Dynamic Soundwave Ripple Rings (Active when speaking/listening) -->
+          <circle id="ripple1" class="ripple-1" cx="130" cy="130" r="65" fill="none" stroke="#00E5FF" stroke-opacity="0.6" stroke-width="2" />
+          <circle id="ripple2" class="ripple-2" cx="130" cy="130" r="65" fill="none" stroke="#00E5FF" stroke-opacity="0.6" stroke-width="2" />
+          <circle id="ripple3" class="ripple-3" cx="130" cy="130" r="65" fill="none" stroke="#00E5FF" stroke-opacity="0.6" stroke-width="2" />
+
+          <!-- Rotating Iridescent Aura Ring -->
+          <g class="aura-spin" style="transform-origin: 130px 130px;">
+            <circle cx="130" cy="130" r="68" fill="none" stroke="url(#auraGradient)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="120 40 80 40" filter="drop-shadow(0 0 8px #00E5FF)" />
+          </g>
+
+          <!-- Counter-rotating accent ring for depth -->
+          <g class="aura-spin-reverse" style="transform-origin: 130px 130px;">
+            <circle cx="130" cy="130" r="76" fill="none" stroke="#FFFFFF" stroke-opacity="0.65" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="60 160" />
+          </g>
+
+          <!-- Glossy Organic Core Body -->
+          <circle cx="130" cy="130" r="62" fill="url(#glossyCore)" />
+          <circle cx="130" cy="130" r="60" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="1" />
+
+          <!-- Pulsing Luminous Center -->
+          <circle cx="130" cy="130" r="28" fill="url(#innerGlow)" />
+        </svg>
+
+        <!-- Centered Modern Clean "MAX" -->
+        <span class="absolute font-semibold text-white tracking-[4px] text-lg pointer-events-none drop-shadow-[0_0_10px_rgba(255,255,255,0.7)]">
+          MAX
+        </span>
+      </div>
+
+      <!-- FACE 2: JARVIS CYAN HUD (Alternative) -->
+      <div id="faceJarvisContainer" class="relative w-64 h-64 hidden items-center justify-center transition-all duration-500">
+        <svg class="w-full h-full" viewBox="0 0 260 260">
+          <circle cx="130" cy="130" r="115" fill="none" stroke="#00E5FF" stroke-opacity="0.25" stroke-width="1" />
+          <g class="aura-spin" style="transform-origin: 130px 130px;">
+            <path d="M 130 15 A 115 115 0 0 1 215 50" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" />
+            <path d="M 130 245 A 115 115 0 0 1 45 210" fill="none" stroke="#00E5FF" stroke-width="2.5" stroke-linecap="round" />
+          </g>
+          <circle cx="130" cy="130" r="72" fill="none" stroke="#00E5FF" stroke-width="3" filter="drop-shadow(0 0 8px #00E5FF)" />
+          <circle cx="130" cy="130" r="66" fill="#040D17" stroke="#00E5FF" stroke-opacity="0.8" stroke-width="1.5" />
+        </svg>
+        <span class="absolute font-bold text-white tracking-[5px] text-xl pointer-events-none">MAX</span>
+      </div>
+
+      <!-- FACE 3: GOLDEN SPHERE (Alternative) -->
+      <div id="faceNeuralContainer" class="relative w-64 h-64 hidden items-center justify-center transition-all duration-500">
+        <svg class="w-full h-full" viewBox="0 0 260 260">
+          <circle cx="130" cy="130" r="110" fill="none" stroke="#FFA726" stroke-opacity="0.3" stroke-width="1" />
+          <g class="aura-spin" style="transform-origin: 130px 130px;">
+            <circle cx="130" cy="130" r="70" fill="none" stroke="#FFA726" stroke-width="3" stroke-dasharray="90 50" filter="drop-shadow(0 0 10px #FFB347)" />
+          </g>
+          <circle cx="130" cy="130" r="60" fill="#1C1004" stroke="#FFA726" stroke-width="1.5" />
+        </svg>
+        <span class="absolute font-bold text-white tracking-[4px] text-lg pointer-events-none">MAX</span>
+      </div>
+
+      <!-- Friendly Subtitle Hint -->
+      <p id="orbHintText" class="mt-4 text-xs font-normal text-slate-400 tracking-wide text-center">
+        Tap orb or say "Hey MAX"
+      </p>
+    </div>
+
+    <!-- 4. Interactive Live Card / Suggestions Section -->
+    <div class="relative z-10 w-full px-5 flex flex-col gap-2.5">
+
+      <!-- Live Speech / Response Bubble -->
+      <div id="speechCard" class="w-full p-3.5 rounded-2xl bg-[#111722]/85 border border-white/10 backdrop-blur-md flex items-center gap-3 transition-all">
+        <div id="speechIconBox" class="w-7 h-7 rounded-full bg-cyan-500/15 flex items-center justify-center text-cyan-400 shrink-0">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p id="speechText" class="text-xs text-slate-100 font-normal leading-relaxed truncate">
+            "जी सर, क्या सेवा करूँ?"
+          </p>
+        </div>
+      </div>
+
+      <!-- Quick Suggestion Chips (Smooth Horizontal Rail) -->
+      <div id="chipsRail" class="w-full flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+        <button onclick="simulateCommand('call Aditya')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          📞 Call
+        </button>
+        <button onclick="simulateCommand('set timer for 5 minutes')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          ⏱️ 5m Timer
+        </button>
+        <button onclick="simulateCommand('play music')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          🎵 Play Music
+        </button>
+        <button onclick="simulateCommand('directions to Kolkata')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          🧭 Directions
+        </button>
+        <button onclick="simulateCommand('take a note: Meeting at 4 PM')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          📝 Note
+        </button>
+        <button onclick="simulateCommand('what is the weather')" class="shrink-0 px-3 py-1.5 rounded-xl bg-[#131A26]/80 border border-white/10 text-xs font-medium text-slate-300 hover:text-white hover:border-cyan-400/50 backdrop-blur-md transition-all">
+          ⛅ Weather
+        </button>
+      </div>
+    </div>
+
+    <!-- 5. Modern Bottom Floating Control Dock -->
+    <div class="relative z-10 w-full px-5 pb-5 pt-2">
+      <div class="flex items-center gap-2.5">
+        
+        <!-- Mute / Unmute Button -->
+        <button id="btnMute" onclick="toggleMute()" class="w-11 h-11 rounded-full bg-[#131A26]/90 border border-white/10 flex items-center justify-center text-cyan-400 hover:brightness-125 backdrop-blur-md transition-all shrink-0">
+          <svg id="iconMic" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
+        </button>
+
+        <!-- Rounded Prompt Text Input Pill -->
+        <div class="flex-1 h-11 rounded-full bg-[#131A26]/90 border border-white/10 px-4 flex items-center justify-between backdrop-blur-md focus-within:border-cyan-400/70 transition-all">
+          <input id="promptInput" type="text" placeholder="Ask MAX anything, Sir..." class="w-full bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" onkeydown="if(event.key==='Enter') sendInput();" />
+          <button onclick="sendInput()" class="text-cyan-400 hover:text-cyan-200 transition-colors pl-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+          </button>
+        </div>
+
+        <!-- Power / Stop MAX Button (Secured with PIN 1212) -->
+        <button id="btnStop" onclick="toggleStopMax()" class="w-11 h-11 rounded-full bg-red-950/40 border border-red-500/30 flex items-center justify-center text-red-400 hover:brightness-125 backdrop-blur-md transition-all shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+        </button>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Interactive JavaScript Logic -->
+  <script>
+    let currentState = 'ready';
+    let currentFace = 'modern';
+    let isMuted = false;
+    let isStopped = false;
+    let currentLang = 'HI';
+
+    function setFace(face) {
+      currentFace = face;
+      ['Modern', 'Jarvis', 'Neural'].forEach(f => {
+        document.getElementById(`face${f}Container`).classList.add('hidden');
+        document.getElementById(`face${f}Container`).classList.remove('flex');
+        document.getElementById(`btnFace${f}`).classList.remove('bg-cyan-500/20', 'text-cyan-300', 'border', 'border-cyan-400/40', 'shadow-[0_0_12px_rgba(0,229,255,0.3)]');
+        document.getElementById(`btnFace${f}`).classList.add('text-slate-400');
+      });
+
+      const activeName = face.charAt(0).toUpperCase() + face.slice(1);
+      document.getElementById(`face${activeName}Container`).classList.remove('hidden');
+      document.getElementById(`face${activeName}Container`).classList.add('flex');
+      document.getElementById(`btnFace${activeName}`).classList.add('bg-cyan-500/20', 'text-cyan-300', 'border', 'border-cyan-400/40', 'shadow-[0_0_12px_rgba(0,229,255,0.3)]');
+      document.getElementById(`btnFace${activeName}`).classList.remove('text-slate-400');
+    }
+
+    function setState(state) {
+      currentState = state;
+      const pill = document.getElementById('statusPill');
+      const led = document.getElementById('statusLed');
+      const text = document.getElementById('statusText');
+      const hint = document.getElementById('orbHintText');
+
+      if (state === 'listening') {
+        led.className = 'w-2 h-2 rounded-full bg-cyan-400 led-pulse';
+        text.innerText = 'Listening...';
+        hint.innerText = 'Listening to your voice, Sir...';
+      } else if (state === 'thinking') {
+        led.className = 'w-2 h-2 rounded-full bg-purple-400 led-pulse';
+        text.innerText = 'Thinking...';
+        hint.innerText = 'Processing your request, Sir...';
+      } else if (state === 'speaking') {
+        led.className = 'w-2 h-2 rounded-full bg-sky-400 led-pulse';
+        text.innerText = 'Speaking...';
+        hint.innerText = 'Tap orb to stop speaking';
+      } else if (state === 'muted') {
+        led.className = 'w-2 h-2 rounded-full bg-amber-400';
+        text.innerText = 'Muted';
+        hint.innerText = 'Microphone is muted. Tap UNMUTE below.';
+      } else if (state === 'stopped') {
+        led.className = 'w-2 h-2 rounded-full bg-slate-400';
+        text.innerText = 'Stopped';
+        hint.innerText = 'MAX is stopped. Enter PIN 1212 to unlock.';
+      } else {
+        led.className = 'w-2 h-2 rounded-full bg-emerald-400 led-pulse';
+        text.innerText = 'Ready';
+        hint.innerText = 'Tap orb or say "Hey MAX"';
+      }
+    }
+
+    function handleOrbTap() {
+      if (currentState === 'stopped') {
+        const pin = prompt('Enter Security PIN (1212) to activate MAX:');
+        if (pin === '1212') {
+          setState('ready');
+          document.getElementById('stateSelect').value = 'ready';
+        } else {
+          alert('Incorrect PIN!');
+        }
+        return;
+      }
+      if (currentState === 'listening') {
+        setState('thinking');
+        setTimeout(() => {
+          setState('speaking');
+          document.getElementById('speechText').innerText = '"जी सर, आपका कार्य पूरा कर दिया गया है।"';
+          setTimeout(() => setState('ready'), 3500);
+        }, 1200);
+      } else {
+        setState('listening');
+        document.getElementById('speechText').innerText = '"सुन रहा हूँ, सर..."';
+      }
+    }
+
+    function simulateCommand(cmd) {
+      document.getElementById('speechText').innerText = `"${cmd}"`;
+      setState('thinking');
+      setTimeout(() => {
+        setState('speaking');
+        if (cmd.includes('call')) {
+          document.getElementById('speechText').innerText = '"जी सर, कॉल किया जा रहा है।"';
+        } else if (cmd.includes('timer')) {
+          document.getElementById('speechText').innerText = '"५ मिनट का टाइमर शुरू कर दिया गया है, सर।"';
+        } else if (cmd.includes('music')) {
+          document.getElementById('speechText').innerText = '"जी सर, संगीत चलाया जा रहा है।"';
+        } else if (cmd.includes('directions')) {
+          document.getElementById('speechText').innerText = '"कोलकाता के लिए दिशा-निर्देश खोले जा रहे हैं, सर।"';
+        } else if (cmd.includes('note')) {
+          document.getElementById('speechText').innerText = '"नोट सुरक्षित कर लिया गया है, सर।"';
+        } else {
+          document.getElementById('speechText').innerText = '"आज का मौसम साफ़ और धूपदार रहेगा, सर।"';
+        }
+        setTimeout(() => setState('ready'), 3500);
+      }, 1000);
+    }
+
+    function sendInput() {
+      const input = document.getElementById('promptInput');
+      if (input.value.trim()) {
+        simulateCommand(input.value.trim());
+        input.value = '';
+      }
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      const btn = document.getElementById('btnMute');
+      if (isMuted) {
+        btn.className = 'w-11 h-11 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400 backdrop-blur-md transition-all shrink-0';
+        setState('muted');
+      } else {
+        btn.className = 'w-11 h-11 rounded-full bg-[#131A26]/90 border border-white/10 flex items-center justify-center text-cyan-400 hover:brightness-125 backdrop-blur-md transition-all shrink-0';
+        setState('ready');
+      }
+    }
+
+    function toggleStopMax() {
+      if (currentState === 'stopped') {
+        const pin = prompt('Enter Security PIN (1212) to unlock:');
+        if (pin === '1212') {
+          setState('ready');
+        } else {
+          alert('Incorrect PIN!');
+        }
+      } else {
+        setState('stopped');
+      }
+    }
+
+    function cycleLang() {
+      const langs = ['HI', 'EN', 'BN'];
+      const nextIdx = (langs.indexOf(currentLang) + 1) % langs.length;
+      currentLang = langs[nextIdx];
+      document.getElementById('langBadge').innerText = currentLang;
+    }
+
+    function showHistory() {
+      alert("Conversation History:\n\n• You: 'Call Aditya'\n• MAX: 'जी सर, आदित्य अंजना को कॉल किया जा रहा है।'\n• You: 'Set timer for 5 minutes'\n• MAX: '५ मिनट का टाइमर शुरू कर दिया गया है, सर।'");
+    }
+
+    function showSettings() {
+      alert("Voice Settings:\n\n• Output Language: " + currentLang + "\n• Pitch: 1.0x\n• Speed: 1.0x\n• Wake Word: 'Hey MAX' (Active)");
+    }
+  </script>
+</body>
+</html>

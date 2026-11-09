@@ -1,0 +1,94 @@
+<USER_REQUEST>
+# MAX — COMPLETE VOICE ASSISTANT, WAKE WORD AND ANDROID ACTION REPAIR
+
+Act as a senior Android Kotlin developer, AI voice engineer and Android system integration specialist.
+
+Project: `C:\Users\user\Documents\MAX`
+
+Package: `com.max.assistant`
+
+Device: Samsung Galaxy S25 Ultra.
+
+Platform: Native Kotlin + Jetpack Compose.
+
+Languages: English, Hindi and Bengali.
+
+My MAX application currently has two critical problems:
+
+1. Almost every voice command opens WhatsApp instead of the requested application or performing the requested action.
+2. MAX does not detect or respond to its wake word reliably. Sometimes it does not listen, misses the wake word, or fails to start listening.
+
+Your job is to inspect the existing project and fix both problems completely. Preserve the existing interface, AI integration, voice personality and conversation history.
+
+## PART A — FIX WAKE WORD DETECTION
+
+### 1. Reliable wake word
+
+Use the wake phrase:
+
+**"Hey MAX"**
+
+Also support reasonable variations:
+- Hey Max
+- Hello Max
+- Max
+- হেই ম্যাক্স
+- ম্যাক্স শোনো
+- हे मैक्स
+
+Allow the user to enable or disable shorter wake phrases because they can trigger accidentally.
+
+### 2. Continuous listening architecture
+
+Implement a proper wake-word detection architecture.
+
+Requirements:
+- Detect the wake phrase reliably.
+- Minimize false activations.
+- Avoid repeatedly starting multiple microphone sessions.
+- Resume listening after MAX finishes speaking.
+- Resume listening after an action completes.
+- Handle silence and speech timeouts.
+- Recover from SpeechRecognizer errors.
+- Handle microphone permission denial.
+- Handle microphone interruptions and audio focus changes.
+- Avoid duplicate speech recognition callbacks.
+- Prevent MAX from recognizing its own TTS voice as a new command.
+- Provide visible listening, processing and speaking states.
+
+IMPORTANT: Android SpeechRecognizer is not a guaranteed always-on wake-word engine. Do not pretend that a normal SpeechRecognizer loop provides reliable continuous background wake-word detection.
+
+Evaluate a lightweight on-device wake-word engine, such as an appropriately licensed Porcupine integration or another maintained offline wake-word solution. Check current SDK availability, licensing, costs and Android compatibility before selecting it.
+
+Prefer offline wake-word detection to minimize battery consumption and avoid continuously sending microphone audio to the cloud.
+
+### 3. Background listening
+
+Implement a compliant microphone foreground service.
+
+Requirements:
+- Correct RECORD_AUDIO permission.
+- FOREGROUND_SERVICE permission where required.
+- FOREGROUND_SERVICE_MICROPHONE permission where required.
+- Microphone foreground service type.
+- Persistent notification stating that MAX is listening.
+- Clear controls to pause, resume and stop listening.
+- Correct Android 14+ and newer Android background execution handling.
+- Explain when Android or Samsung battery restrictions prevent background listening.
+- Do not secretly activate the microphone.
+- Do not attempt to bypass Android microphone restrictions.
+
+The user must explicitly enable listening from MAX.
+
+Do not automatically restart microphone capture from boot or from an unauthorized background state.
+
+### 4. Wake-word state machine
+
+Implement a robust
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-03T13:00:31+05:30.
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.8 Flash (Medium) to Gemini 3.8 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

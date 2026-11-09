@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">MAX</string>
+    <string name="accessibility_service_description">MAX Gallery Protection Service prevents unauthorized access to photos and galleries.</string>
+</resources>
