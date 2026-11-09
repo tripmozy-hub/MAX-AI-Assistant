@@ -5,6 +5,7 @@ import android.util.Log
 import com.max.assistant.accessibility.AndroidAccessibilityController
 import com.max.assistant.appcontrol.AppInteractionManager
 import com.max.assistant.launcher.AppLauncher
+import com.max.assistant.protection.GalleryProtectionManager
 import com.max.assistant.tts.VoiceLanguage
 import kotlinx.coroutines.delay
 
@@ -16,7 +17,7 @@ sealed class ExecutionStepType {
     object ScrollDown : ExecutionStepType()
     object ScrollUp : ExecutionStepType()
     object PressBack : ExecutionStepType()
-    data class WaitAndVerify(val conditionName: String, val timeoutMs: Long = 3000L) : ExecutionStepType()
+    data class WaitAndVerify(val conditionName: String, val timeoutMs: Long = 2000L) : ExecutionStepType()
 }
 
 data class ExecutionStep(
@@ -115,6 +116,10 @@ class TaskExecutionEngine(
     private suspend fun executeSingleStep(action: ExecutionStepType): Boolean {
         return when (action) {
             is ExecutionStepType.LaunchApp -> {
+                if (GalleryProtectionManager.shouldBlockVoiceLaunch(action.appQuery)) {
+                    Log.w(TAG, "Blocked gallery launch step in execution plan.")
+                    return false
+                }
                 val res = appLauncher.launchAppByVoice(action.appQuery)
                 delay(1200L)
                 res !is com.max.assistant.launcher.LaunchResult.NotFound &&
@@ -153,10 +158,15 @@ class TaskExecutionEngine(
     fun createPlanForQuery(query: String): ExecutionPlan? {
         val lower = query.lowercase().trim()
 
+        // Privacy check
+        if (GalleryProtectionManager.shouldBlockVoiceLaunch(query)) {
+            return null
+        }
+
         // 1. YouTube multi-step task: "open youtube search for ... and play"
-        if (lower.contains("youtube") && (lower.contains("search") || lower.contains("play"))) {
+        if (lower.contains("youtube") && (lower.contains("search") || lower.contains("play") || lower.contains("chalao") || lower.contains("chala do"))) {
             val searchTerm = query.replace(Regex("(?i)^(.*?(search for|play|find|kholo))\\s+"), "")
-                .replace(Regex("(?i)(and play.*|video.*|on youtube.*)"), "")
+                .replace(Regex("(?i)(and play.*|video.*|on youtube.*|chalao.*|chala do.*)"), "")
                 .trim()
             val cleanSearch = if (searchTerm.isNotBlank()) searchTerm else "Bengali travel documentary"
 
@@ -173,7 +183,7 @@ class TaskExecutionEngine(
         }
 
         // 2. Chrome multi-step search & open: "open chrome search for ... and open first result"
-        if (lower.contains("chrome") && (lower.contains("search") || lower.contains("open"))) {
+        if (lower.contains("chrome") && (lower.contains("search") || lower.contains("open") || lower.contains("kholo") || lower.contains("khojo"))) {
             val searchTerm = query.replace(Regex("(?i)^(.*?(search for|search|dhoondo|khojo))\\s+"), "")
                 .replace(Regex("(?i)(and open.*|first result.*|in chrome.*)"), "")
                 .trim()
@@ -190,14 +200,45 @@ class TaskExecutionEngine(
             )
         }
 
-        // 3. Settings Bluetooth multi-step: "open settings find bluetooth and turn it on"
-        if (lower.contains("bluetooth") && (lower.contains("turn on") || lower.contains("enable") || lower.contains("chalu"))) {
+        // 3. Settings Bluetooth multi-step
+        if (lower.contains("bluetooth") && (lower.contains("turn on") || lower.contains("enable") || lower.contains("chalu") || lower.contains("on karo"))) {
             return ExecutionPlan(
                 title = "Enable Bluetooth in Settings",
                 steps = mutableListOf(
                     ExecutionStep(1, "Open Bluetooth settings", ExecutionStepType.LaunchApp("settings")),
                     ExecutionStep(2, "Click Bluetooth menu", ExecutionStepType.ClickElement("Bluetooth")),
                     ExecutionStep(3, "Toggle Bluetooth switch on", ExecutionStepType.ClickElement("Off"))
+                )
+            )
+        }
+
+        // 4. Settings Wi-Fi multi-step
+        if ((lower.contains("wifi") || lower.contains("wi-fi")) && (lower.contains("turn on") || lower.contains("enable") || lower.contains("chalu") || lower.contains("on karo"))) {
+            return ExecutionPlan(
+                title = "Enable Wi-Fi in Settings",
+                steps = mutableListOf(
+                    ExecutionStep(1, "Open Wi-Fi settings", ExecutionStepType.LaunchApp("settings")),
+                    ExecutionStep(2, "Click Wi-Fi menu", ExecutionStepType.ClickElement("Wi-Fi")),
+                    ExecutionStep(3, "Toggle Wi-Fi switch on", ExecutionStepType.ClickElement("Off"))
+                )
+            )
+        }
+
+        // 5. WhatsApp multi-step: "open whatsapp search for X and open chat"
+        if (lower.contains("whatsapp") && (lower.contains("chat") || lower.contains("open") || lower.contains("kholo"))) {
+            val contact = query.replace(Regex("(?i)^(.*?(chat of|chat|kholo|open))\\s+"), "")
+                .replace(Regex("(?i)(ka chat.*|ki chat.*|on whatsapp.*)"), "")
+                .trim()
+            val cleanContact = if (contact.isNotBlank()) contact else "Rahul"
+
+            return ExecutionPlan(
+                title = "Open WhatsApp chat with $cleanContact",
+                steps = mutableListOf(
+                    ExecutionStep(1, "Open WhatsApp application", ExecutionStepType.LaunchApp("whatsapp")),
+                    ExecutionStep(2, "Click search contact", ExecutionStepType.ClickElement("Search")),
+                    ExecutionStep(3, "Type contact name '$cleanContact'", ExecutionStepType.TypeText(cleanContact)),
+                    ExecutionStep(4, "Wait for contact match", ExecutionStepType.WaitAndVerify("Chat match loaded", 1000L)),
+                    ExecutionStep(5, "Open contact chat", ExecutionStepType.ClickElement(cleanContact, isExact = false))
                 )
             )
         }

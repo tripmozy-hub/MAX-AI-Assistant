@@ -103,6 +103,27 @@ sealed class BrainDecision {
     data class ExecuteCompoundTask(val query: String, val language: VoiceLanguage) : BrainDecision()
     data class CancelTask(val language: VoiceLanguage) : BrainDecision()
     data class ExplainTaskProgress(val language: VoiceLanguage) : BrainDecision()
+
+    // Advanced Contextual Memory Decisions
+    data class RecallYesterdayDiscussion(val language: VoiceLanguage) : BrainDecision()
+    data class RecallProjectTasks(val projectName: String, val language: VoiceLanguage) : BrainDecision()
+    data class SaveUserMemory(val fact: String, val language: VoiceLanguage) : BrainDecision()
+    data class ForgetUserMemory(val query: String, val language: VoiceLanguage) : BrainDecision()
+    data class RecallUserMemories(val language: VoiceLanguage) : BrainDecision()
+
+    // Self-Healing & Health Monitor Decisions
+    data class CheckSystemHealth(val language: VoiceLanguage) : BrainDecision()
+    data class RunSelfDiagnostics(val language: VoiceLanguage) : BrainDecision()
+
+    // Intelligent Notification Decisions
+    data class SummarizeNotifications(val language: VoiceLanguage) : BrainDecision()
+    data class ReadWhatsAppNotifications(val language: VoiceLanguage) : BrainDecision()
+
+    // Live Internet Research Decisions
+    data class ConductLiveResearch(val query: String, val language: VoiceLanguage) : BrainDecision()
+
+    // Performance Analytics Decisions
+    data class QueryPerformanceStats(val language: VoiceLanguage) : BrainDecision()
 }
 
 class MaxAiBrain(
@@ -188,6 +209,12 @@ class MaxAiBrain(
         val taskDecision = parseMultiStepTaskCommands(cleanLower, trimmed, targetLang)
         if (taskDecision != null) {
             return taskDecision
+        }
+
+        // 2a.2b Advanced Upgrades (Contextual Memory, Self-Healing Health, Notifications, Live Research, Performance)
+        val advancedDecision = parseAdvancedUpgradeCommands(cleanLower, trimmed, targetLang)
+        if (advancedDecision != null) {
+            return advancedDecision
         }
 
         // 2a.3 Screen Question Follow-Up (when recent screen context exists)
@@ -1726,6 +1753,103 @@ class MaxAiBrain(
                 (cleanLower.contains("bluetooth") && cleanLower.contains("turn on") && cleanLower.contains("settings"))
         if (isCompound) {
             return BrainDecision.ExecuteCompoundTask(trimmed, targetLang)
+        }
+
+        return null
+    }
+
+    private fun parseAdvancedUpgradeCommands(cleanLower: String, trimmed: String, targetLang: VoiceLanguage): BrainDecision? {
+        // 1. Contextual Memory:
+        // Yesterday's conversation recall
+        if (cleanLower.contains("kal humne kya discuss kiya") || cleanLower.contains("kal kya discuss kiya") ||
+            cleanLower.contains("what did we discuss yesterday") || cleanLower.contains("kal humne kya baat ki") ||
+            cleanLower.contains("yesterday discussion")
+        ) {
+            return BrainDecision.RecallYesterdayDiscussion(targetLang)
+        }
+
+        // Project tasks recall: "TripMozy ka pending kaam kya hai" / "<project> ka pending kaam" / "pending tasks for <project>"
+        val projectMatch = Regex("(?i)([a-z0-9_-]+)\\s+ka\\s+pending\\s+kaam").find(cleanLower)
+            ?: Regex("(?i)pending\\s+(?:tasks|work)\\s+(?:for|of)\\s+([a-z0-9_-]+)").find(cleanLower)
+        if (projectMatch != null) {
+            val projectName = projectMatch.groupValues[1].trim()
+            return BrainDecision.RecallProjectTasks(projectName, targetLang)
+        }
+
+        // Save memory: "yaad rakho ki <fact>" / "remember this: <fact>" / "remember that <fact>" / "yaad rakhna <fact>"
+        if (cleanLower.startsWith("yaad rakho") || cleanLower.startsWith("remember this") ||
+            cleanLower.startsWith("remember that") || cleanLower.startsWith("yaad rakhna") ||
+            cleanLower.contains("yeh yaad rakho")
+        ) {
+            val fact = trimmed.replace(Regex("(?i)^(hey\\s+max|ok\\s+max|hello\\s+max|max)[,\\s:]*"), "")
+                .replace(Regex("(?i)^(yeh\\s+yaad\\s+rakho|yaad\\s+rakho\\s+ki|yaad\\s+rakho|yaad\\s+rakhna|remember\\s+this\\s*[:,]?|remember\\s+that)\\s*"), "")
+                .trim()
+            if (fact.isNotBlank()) {
+                return BrainDecision.SaveUserMemory(fact, targetLang)
+            }
+        }
+
+        // Forget memory: "bhool jao <query>" / "forget <query>"
+        if (cleanLower.startsWith("bhool jao") || cleanLower.startsWith("forget this") || cleanLower.startsWith("forget that")) {
+            val query = trimmed.replace(Regex("(?i)^(hey\\s+max|ok\\s+max|hello\\s+max|max)[,\\s:]*"), "")
+                .replace(Regex("(?i)^(bhool\\s+jao|forget\\s+this|forget\\s+that|forget)\\s*"), "")
+                .trim()
+            return BrainDecision.ForgetUserMemory(query, targetLang)
+        }
+
+        // Recall all memories: "mere baare mein kya jante ho" / "what do you remember about me"
+        if (cleanLower.contains("mere baare mein kya jante ho") || cleanLower.contains("what do you remember about me") ||
+            cleanLower.contains("saved memories dikhao") || cleanLower.contains("show my memories")
+        ) {
+            return BrainDecision.RecallUserMemories(targetLang)
+        }
+
+        // 2. Self-Healing & Health Monitor:
+        // "system health" / "check health" / "kaisa chal raha hai system" / "health report"
+        if (cleanLower.contains("system health") || cleanLower.contains("health report") ||
+            cleanLower.contains("kaisa chal raha hai system") || cleanLower.contains("health check")
+        ) {
+            return BrainDecision.CheckSystemHealth(targetLang)
+        }
+        if (cleanLower.contains("run diagnostics") || cleanLower.contains("system diagnostics") ||
+            cleanLower.contains("diagnostic report") || cleanLower.contains("diagnostics check")
+        ) {
+            return BrainDecision.RunSelfDiagnostics(targetLang)
+        }
+
+        // 3. Intelligent Notification Manager:
+        // "important notifications" / "mere notification batao" / "read my notifications"
+        if (cleanLower.contains("important notifications") || cleanLower.contains("mere notification batao") ||
+            cleanLower.contains("read my notifications") || cleanLower.contains("read notifications") ||
+            cleanLower.contains("koi notification hai kya")
+        ) {
+            return BrainDecision.SummarizeNotifications(targetLang)
+        }
+        if (cleanLower.contains("whatsapp messages padho") || cleanLower.contains("read whatsapp notifications") ||
+            cleanLower.contains("whatsapp notification padho") || cleanLower.contains("read whatsapp messages")
+        ) {
+            return BrainDecision.ReadWhatsAppNotifications(targetLang)
+        }
+
+        // 4. Live Internet Research Engine:
+        // "search internet for <query>" / "online research karo <query>" / "research on <query>"
+        if (cleanLower.startsWith("search internet for") || cleanLower.startsWith("online research karo") ||
+            cleanLower.startsWith("research on") || cleanLower.startsWith("internet pe research karo")
+        ) {
+            val query = trimmed.replace(Regex("(?i)^(hey\\s+max|ok\\s+max|hello\\s+max|max)[,\\s:]*"), "")
+                .replace(Regex("(?i)^(search\\s+internet\\s+for|online\\s+research\\s+karo|research\\s+on|internet\\s+pe\\s+research\\s+karo)\\s*"), "")
+                .trim()
+            if (query.isNotBlank()) {
+                return BrainDecision.ConductLiveResearch(query, targetLang)
+            }
+        }
+
+        // 5. Performance Analytics Engine:
+        // "max performance" / "performance report" / "performance stats"
+        if (cleanLower.contains("max performance") || cleanLower.contains("performance report") ||
+            cleanLower.contains("performance stats") || cleanLower.contains("success rate")
+        ) {
+            return BrainDecision.QueryPerformanceStats(targetLang)
         }
 
         return null

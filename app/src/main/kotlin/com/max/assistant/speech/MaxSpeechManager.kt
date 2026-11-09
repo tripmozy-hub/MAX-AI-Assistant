@@ -32,7 +32,10 @@ enum class AssistantState {
     FAILED,
     MUTED,
     STOPPED,
-    AWAITING_PIN
+    AWAITING_PIN,
+    VERIFYING,
+    RECOVERING,
+    SCREEN_SHARING
 }
 
 class MaxSpeechManager(

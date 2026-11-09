@@ -135,6 +135,16 @@ class MaxForegroundService : Service() {
         private set
     lateinit var babyEntertainmentManager: com.max.assistant.baby.BabyEntertainmentManager
         private set
+    lateinit var contextMemoryManager: com.max.assistant.memory.ContextMemoryManager
+        private set
+    lateinit var healthMonitor: com.max.assistant.healing.MaxHealthMonitor
+        private set
+    lateinit var notificationManager: com.max.assistant.notification.IntelligentNotificationManager
+        private set
+    lateinit var researchEngine: com.max.assistant.research.LiveInternetResearchEngine
+        private set
+    lateinit var performanceAnalytics: com.max.assistant.analytics.PerformanceAnalyticsEngine
+        private set
 
     fun isBabyEntertainmentManagerInitialized(): Boolean = ::babyEntertainmentManager.isInitialized
     val intentRecognizer = com.max.assistant.dictionary.MultilingualIntentRecognizer()
@@ -175,6 +185,12 @@ class MaxForegroundService : Service() {
         studyEducationManager = com.max.assistant.education.StudyEducationManager(this, aiBrain.aiProvider)
         reminderScheduler = com.max.assistant.database.ReminderScheduler(this)
         serviceController = com.max.assistant.service.MaxServiceController(this, this, screenVisionManager)
+
+        contextMemoryManager = com.max.assistant.memory.ContextMemoryManager(this)
+        healthMonitor = com.max.assistant.healing.MaxHealthMonitor.getInstance(this)
+        notificationManager = com.max.assistant.notification.IntelligentNotificationManager.getInstance(this)
+        researchEngine = com.max.assistant.research.LiveInternetResearchEngine(this)
+        performanceAnalytics = com.max.assistant.analytics.PerformanceAnalyticsEngine(this)
 
         voiceEngine = MaxVoiceEngine(this) {
             voiceEngine.setMute(false)
@@ -238,6 +254,9 @@ class MaxForegroundService : Service() {
                     com.max.assistant.speech.AssistantState.PROCESSING -> "Processing command..."
                     com.max.assistant.speech.AssistantState.SPEAKING -> "Speaking..."
                     com.max.assistant.speech.AssistantState.EXECUTING_COMMAND -> "Executing action..."
+                    com.max.assistant.speech.AssistantState.VERIFYING -> "Verifying outcome..."
+                    com.max.assistant.speech.AssistantState.RECOVERING -> "Self-healing & recovering..."
+                    com.max.assistant.speech.AssistantState.SCREEN_SHARING -> "Screen Vision Active"
                     com.max.assistant.speech.AssistantState.MUTED -> "Microphone Muted"
                     com.max.assistant.speech.AssistantState.STOPPED -> "MAX Stopped (Locked)"
                     com.max.assistant.speech.AssistantState.AWAITING_PIN -> "Awaiting Security PIN 1212..."
@@ -517,12 +536,40 @@ class MaxForegroundService : Service() {
         // 2. Query Processing with History Context (Async for AI Brain & Online Knowledge)
         speechManager.setAssistantState(com.max.assistant.speech.AssistantState.THINKING)
         serviceScope.launch {
-            val decision = aiBrain.processQueryAsync(
-                input = command,
-                outputLanguageSetting = currentOutputLang,
-                history = conversationRepo.getRecentHistory()
-            )
-            executeBrainDecision(decision, currentOutputLang)
+            val startTime = System.currentTimeMillis()
+            try {
+                val decision = aiBrain.processQueryAsync(
+                    input = command,
+                    outputLanguageSetting = currentOutputLang,
+                    history = conversationRepo.getRecentHistory()
+                )
+                executeBrainDecision(decision, currentOutputLang)
+                val duration = System.currentTimeMillis() - startTime
+                performanceAnalytics.trackExecution(
+                    rawCommand = command,
+                    normalizedIntent = decision.javaClass.simpleName,
+                    executionTimeMs = duration,
+                    success = true,
+                    language = currentOutputLang
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing command '$command': ${e.message}", e)
+                val duration = System.currentTimeMillis() - startTime
+                performanceAnalytics.trackExecution(
+                    rawCommand = command,
+                    normalizedIntent = "EXCEPTION",
+                    executionTimeMs = duration,
+                    success = false,
+                    failureReason = e.message ?: "Unknown execution error",
+                    language = currentOutputLang
+                )
+                healthMonitor.reportIncident(
+                    component = com.max.assistant.healing.MonitoredComponent.GEMINI_API,
+                    errorType = "COMMAND_EXECUTION_EXCEPTION",
+                    message = e.message ?: "Execution error",
+                    severity = "MEDIUM"
+                )
+            }
         }
     }
 
@@ -1108,6 +1155,114 @@ class MaxForegroundService : Service() {
                 speakWithCoordination(stopMsg, decision.language)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, stopMsg, decision.language)
                 addLog("Baby Entertainment Mode stopped")
+            }
+
+            // Advanced Contextual Memory Decisions
+            is BrainDecision.RecallYesterdayDiscussion -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val reply = contextMemoryManager.recallYesterdayDiscussion(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(reply, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, reply, decision.language)
+                }
+            }
+            is BrainDecision.RecallProjectTasks -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val reply = contextMemoryManager.recallProjectTasks(decision.projectName, decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(reply, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, reply, decision.language)
+                }
+            }
+            is BrainDecision.SaveUserMemory -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val reply = contextMemoryManager.saveUserMemory(decision.fact, decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(reply, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, reply, decision.language)
+                }
+            }
+            is BrainDecision.ForgetUserMemory -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val reply = contextMemoryManager.forgetMemory(decision.query, decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(reply, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, reply, decision.language)
+                }
+            }
+            is BrainDecision.RecallUserMemories -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val reply = contextMemoryManager.recallUserMemories(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(reply, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, reply, decision.language)
+                }
+            }
+
+            // Self-Healing & Health Monitor Decisions
+            is BrainDecision.CheckSystemHealth -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val summary = healthMonitor.getHealthSummary(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(summary, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, summary, decision.language)
+                }
+            }
+            is BrainDecision.RunSelfDiagnostics -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.VERIFYING)
+                serviceScope.launch {
+                    val diag = healthMonitor.runSelfDiagnostics(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(diag, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, diag, decision.language)
+                }
+            }
+
+            // Intelligent Notification Decisions
+            is BrainDecision.SummarizeNotifications -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val notifs = notificationManager.summarizeImportantNotifications(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(notifs, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, notifs, decision.language)
+                }
+            }
+            is BrainDecision.ReadWhatsAppNotifications -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                serviceScope.launch {
+                    val msgs = notificationManager.readWhatsAppMessagesAloud(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(msgs, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, msgs, decision.language)
+                }
+            }
+
+            // Live Internet Research Decisions
+            is BrainDecision.ConductLiveResearch -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.THINKING)
+                serviceScope.launch {
+                    val report = researchEngine.conductResearch(decision.query, decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                    speakWithCoordination(report.spokenSummary, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, report.spokenSummary, decision.language)
+                }
+            }
+
+            // Performance Analytics Decisions
+            is BrainDecision.QueryPerformanceStats -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
+                serviceScope.launch {
+                    val stats = performanceAnalytics.getPerformanceSummary(decision.language)
+                    speakWithCoordination(stats, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, stats, decision.language)
+                }
             }
         }
     }

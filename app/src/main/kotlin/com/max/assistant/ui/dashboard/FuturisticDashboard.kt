@@ -129,6 +129,9 @@ fun FuturisticDashboard(
         AssistantState.LISTENING_FOR_COMMAND -> Pair("Listening...", Color(0xFF00E5FF))
         AssistantState.THINKING, AssistantState.PROCESSING -> Pair("Thinking...", Color(0xFFBD00FF))
         AssistantState.EXECUTING_COMMAND -> Pair("Executing...", Color(0xFF00E5FF))
+        AssistantState.VERIFYING -> Pair("Verifying Outcome...", Color(0xFF00E5FF))
+        AssistantState.RECOVERING -> Pair("Self-Healing...", Color(0xFFFF9900))
+        AssistantState.SCREEN_SHARING -> Pair("Screen Vision Active", Color(0xFFFF1744))
         AssistantState.COMPLETED -> Pair("Ready", Color(0xFF00E676))
         AssistantState.FAILED -> Pair("Attention Needed", Color(0xFFFF5252))
         AssistantState.SPEAKING -> Pair("Speaking...", Color(0xFF40C4FF))
@@ -351,6 +354,10 @@ fun FuturisticDashboard(
                     text = when (assistantState) {
                         AssistantState.LISTENING_FOR_COMMAND -> "Listening to your voice, Sir..."
                         AssistantState.THINKING, AssistantState.PROCESSING -> "Processing your request, Sir..."
+                        AssistantState.EXECUTING_COMMAND -> "Executing action on device..."
+                        AssistantState.VERIFYING -> "Verifying action outcome on screen..."
+                        AssistantState.RECOVERING -> "Performing self-healing recovery..."
+                        AssistantState.SCREEN_SHARING -> "Screen vision is active (tap to stop)"
                         AssistantState.SPEAKING -> "Tap orb or button to stop speaking"
                         AssistantState.MUTED -> "Microphone is muted. Tap UNMUTE below."
                         AssistantState.STOPPED -> "MAX is stopped. Tap or say wake word."

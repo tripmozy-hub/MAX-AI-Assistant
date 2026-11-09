@@ -57,9 +57,15 @@ class GeminiAiProvider(
         }
 
         try {
+            val memoryContext = if (context != null) {
+                try {
+                    com.max.assistant.memory.ContextMemoryManager(context).getPromptContextEnrichment()
+                } catch (_: Exception) { "" }
+            } else ""
+
             // System prompt emphasizing JARVIS persona & addressing user as Sir, unless customized
             val systemInstruction = if (!systemInstructionOverride.isNullOrBlank()) {
-                systemInstructionOverride
+                if (memoryContext.isNotBlank()) "$systemInstructionOverride\n$memoryContext" else systemInstructionOverride
             } else {
                 val langInstruction = when (preferredLanguage) {
                     VoiceLanguage.HINGLISH -> "Reply in natural Hinglish — a smooth, conversational mix of Hindi and English the way young Indians actually speak. Use English words naturally within Hindi sentences. For example: 'Sir, aapka kaam ho jayega, bas ek second.' or 'Bilkul Sir, main abhi check kar leta hoon.' Address user as 'Sir'. Never use pure formal Hindi or pure formal English — keep it natural, warm, and conversational."
@@ -71,7 +77,9 @@ class GeminiAiProvider(
 
                 "You are MAX, an intelligent personal AI assistant inspired by JARVIS. " +
                         "Your personality is calm, witty, friendly, and deeply knowledgeable — like a trusted friend who also happens to be brilliant. " +
-                        "$langInstruction Keep answers concise, clear, and direct for audio speech synthesis. Avoid Markdown formatting like asterisks or hashtags."
+                        "$langInstruction " +
+                        (if (memoryContext.isNotBlank()) "\n$memoryContext\n" else "") +
+                        "Keep answers concise, clear, and direct for audio speech synthesis. Avoid Markdown formatting like asterisks or hashtags."
             }
 
             val jsonBody = JSONObject().apply {

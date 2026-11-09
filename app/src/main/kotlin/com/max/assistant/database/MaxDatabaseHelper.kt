@@ -34,12 +34,76 @@ data class StudyQuizRecord(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+data class UserMemoryRecord(
+    val id: Long = 0,
+    val memoryKey: String,
+    val content: String,
+    val category: String = "PREFERENCE", // PREFERENCE, FACT, WORKFLOW, IMPORTANT_INFO
+    val tags: String = "",
+    val expiryEpoch: Long = 0L,         // 0 = never expires
+    val isUserApproved: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class ProjectTaskRecord(
+    val id: Long = 0,
+    val projectName: String,
+    val taskTitle: String,
+    val status: String = "PENDING",     // PENDING, IN_PROGRESS, COMPLETED
+    val notes: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+data class ConversationRecord(
+    val id: Long = 0,
+    val sessionId: String,
+    val role: String,                   // USER, MAX, SYSTEM
+    val message: String,
+    val language: String = "en",
+    val timestamp: Long = System.currentTimeMillis(),
+    val summary: String = "",
+    val isSensitive: Boolean = false
+)
+
+data class HealthIncidentRecord(
+    val id: Long = 0,
+    val component: String,
+    val errorType: String,
+    val severity: String = "MEDIUM",    // LOW, MEDIUM, HIGH, CRITICAL
+    val message: String,
+    val recoveryLevel: Int = 1,         // 1 = Automatic, 2 = Assisted, 3 = Developer
+    val resolution: String = "RESOLVED", // RESOLVED, RETRYING, ACTION_REQUIRED, FAILED
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class CommandAnalyticsRecord(
+    val id: Long = 0,
+    val rawCommand: String,
+    val normalizedIntent: String,
+    val executionTimeMs: Long,
+    val success: Boolean,
+    val failureReason: String = "",
+    val language: String = "en",
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class LearnedSynonymRecord(
+    val id: Long = 0,
+    val phrase: String,
+    val canonicalIntent: String,
+    val usageCount: Int = 1,
+    val isConfirmed: Boolean = true,
+    val lastUsedAt: Long = System.currentTimeMillis()
+)
+
 class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         private const val TAG = "MaxDatabaseHelper"
         private const val DATABASE_NAME = "max_assistant.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
 
         // Table Reminders
         const val TABLE_REMINDERS = "reminders"
@@ -68,6 +132,70 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         const val COL_QUIZ_EXAM = "exam_type"
         const val COL_QUIZ_QUESTIONS = "questions_json"
         const val COL_QUIZ_CREATED = "created_at"
+
+        // Table User Memories (Persistent Contextual Memory)
+        const val TABLE_USER_MEMORIES = "user_memories"
+        const val COL_MEM_ID = "id"
+        const val COL_MEM_KEY = "memory_key"
+        const val COL_MEM_CONTENT = "content"
+        const val COL_MEM_CATEGORY = "category"
+        const val COL_MEM_TAGS = "tags"
+        const val COL_MEM_EXPIRY = "expiry_epoch"
+        const val COL_MEM_APPROVED = "is_user_approved"
+        const val COL_MEM_CREATED = "created_at"
+        const val COL_MEM_UPDATED = "updated_at"
+
+        // Table Project Tasks
+        const val TABLE_PROJECT_TASKS = "project_tasks"
+        const val COL_TASK_ID = "id"
+        const val COL_TASK_PROJECT = "project_name"
+        const val COL_TASK_TITLE = "task_title"
+        const val COL_TASK_STATUS = "status"
+        const val COL_TASK_NOTES = "notes"
+        const val COL_TASK_CREATED = "created_at"
+        const val COL_TASK_UPDATED = "updated_at"
+
+        // Table Conversation Records
+        const val TABLE_CONVERSATIONS = "conversation_records"
+        const val COL_CONV_ID = "id"
+        const val COL_CONV_SESSION = "session_id"
+        const val COL_CONV_ROLE = "role"
+        const val COL_CONV_MSG = "message"
+        const val COL_CONV_LANG = "language"
+        const val COL_CONV_TIME = "timestamp"
+        const val COL_CONV_SUMMARY = "summary"
+        const val COL_CONV_SENSITIVE = "is_sensitive"
+
+        // Table Health Incidents (Self-Healing Monitor)
+        const val TABLE_HEALTH_INCIDENTS = "health_incidents"
+        const val COL_INC_ID = "id"
+        const val COL_INC_COMPONENT = "component"
+        const val COL_INC_TYPE = "error_type"
+        const val COL_INC_SEVERITY = "severity"
+        const val COL_INC_MSG = "message"
+        const val COL_INC_LEVEL = "recovery_level"
+        const val COL_INC_RESOLUTION = "resolution"
+        const val COL_INC_TIME = "timestamp"
+
+        // Table Command Analytics (Performance Learning)
+        const val TABLE_COMMAND_ANALYTICS = "command_analytics"
+        const val COL_ANA_ID = "id"
+        const val COL_ANA_COMMAND = "raw_command"
+        const val COL_ANA_INTENT = "normalized_intent"
+        const val COL_ANA_EXEC_MS = "execution_time_ms"
+        const val COL_ANA_SUCCESS = "success"
+        const val COL_ANA_REASON = "failure_reason"
+        const val COL_ANA_LANG = "language"
+        const val COL_ANA_TIME = "timestamp"
+
+        // Table Learned Synonyms
+        const val TABLE_LEARNED_SYNONYMS = "learned_synonyms"
+        const val COL_SYN_ID = "id"
+        const val COL_SYN_PHRASE = "phrase"
+        const val COL_SYN_INTENT = "canonical_intent"
+        const val COL_SYN_COUNT = "usage_count"
+        const val COL_SYN_CONFIRMED = "is_confirmed"
+        const val COL_SYN_LAST_USED = "last_used_at"
 
         @Volatile
         private var instance: MaxDatabaseHelper? = null
@@ -119,11 +247,106 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
             )
             """.trimIndent()
         )
-        Log.i(TAG, "MAX Assistant database initialized successfully with reminders and study tables.")
+
+        createVersion2Tables(db)
+        Log.i(TAG, "MAX Assistant database initialized successfully with complete tables (v$DATABASE_VERSION).")
+    }
+
+    private fun createVersion2Tables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_USER_MEMORIES (
+                $COL_MEM_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_MEM_KEY TEXT NOT NULL UNIQUE,
+                $COL_MEM_CONTENT TEXT NOT NULL,
+                $COL_MEM_CATEGORY TEXT NOT NULL DEFAULT 'PREFERENCE',
+                $COL_MEM_TAGS TEXT,
+                $COL_MEM_EXPIRY INTEGER NOT NULL DEFAULT 0,
+                $COL_MEM_APPROVED INTEGER NOT NULL DEFAULT 1,
+                $COL_MEM_CREATED INTEGER NOT NULL,
+                $COL_MEM_UPDATED INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_PROJECT_TASKS (
+                $COL_TASK_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_TASK_PROJECT TEXT NOT NULL,
+                $COL_TASK_TITLE TEXT NOT NULL,
+                $COL_TASK_STATUS TEXT NOT NULL DEFAULT 'PENDING',
+                $COL_TASK_NOTES TEXT,
+                $COL_TASK_CREATED INTEGER NOT NULL,
+                $COL_TASK_UPDATED INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_CONVERSATIONS (
+                $COL_CONV_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_CONV_SESSION TEXT NOT NULL,
+                $COL_CONV_ROLE TEXT NOT NULL,
+                $COL_CONV_MSG TEXT NOT NULL,
+                $COL_CONV_LANG TEXT NOT NULL DEFAULT 'en',
+                $COL_CONV_TIME INTEGER NOT NULL,
+                $COL_CONV_SUMMARY TEXT,
+                $COL_CONV_SENSITIVE INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_HEALTH_INCIDENTS (
+                $COL_INC_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_INC_COMPONENT TEXT NOT NULL,
+                $COL_INC_TYPE TEXT NOT NULL,
+                $COL_INC_SEVERITY TEXT NOT NULL DEFAULT 'MEDIUM',
+                $COL_INC_MSG TEXT NOT NULL,
+                $COL_INC_LEVEL INTEGER NOT NULL DEFAULT 1,
+                $COL_INC_RESOLUTION TEXT NOT NULL DEFAULT 'RESOLVED',
+                $COL_INC_TIME INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_COMMAND_ANALYTICS (
+                $COL_ANA_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_ANA_COMMAND TEXT NOT NULL,
+                $COL_ANA_INTENT TEXT NOT NULL,
+                $COL_ANA_EXEC_MS INTEGER NOT NULL,
+                $COL_ANA_SUCCESS INTEGER NOT NULL,
+                $COL_ANA_REASON TEXT,
+                $COL_ANA_LANG TEXT NOT NULL DEFAULT 'en',
+                $COL_ANA_TIME INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_LEARNED_SYNONYMS (
+                $COL_SYN_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COL_SYN_PHRASE TEXT NOT NULL UNIQUE,
+                $COL_SYN_INTENT TEXT NOT NULL,
+                $COL_SYN_COUNT INTEGER NOT NULL DEFAULT 1,
+                $COL_SYN_CONFIRMED INTEGER NOT NULL DEFAULT 1,
+                $COL_SYN_LAST_USED INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Migration logic for future schema increments
+        if (oldVersion < 2) {
+            createVersion2Tables(db)
+            Log.i(TAG, "Upgraded MAX database from v$oldVersion to v$newVersion.")
+        }
     }
 
     // ==================== REMINDERS CRUD ====================
@@ -169,9 +392,9 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
                         title = c.getString(titleIdx),
                         notes = c.getString(notesIdx) ?: "",
                         triggerTimeEpoch = c.getLong(triggerIdx),
-                        repeatInterval = c.getString(repeatIdx) ?: "NONE",
+                        repeatInterval = c.getString(repeatIdx),
                         isActive = c.getInt(activeIdx) == 1,
-                        priority = c.getString(priorityIdx) ?: "MEDIUM",
+                        priority = c.getString(priorityIdx),
                         createdAt = c.getLong(createdIdx)
                     )
                 )
@@ -179,6 +402,16 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
         }
         return list
     }
+
+    fun deleteReminder(id: Long): Boolean {
+        return writableDatabase.delete(TABLE_REMINDERS, "$COL_REM_ID = ?", arrayOf(id.toString())) > 0
+    }
+
+    fun deleteRemindersByTitle(titlePattern: String): Int {
+        return writableDatabase.delete(TABLE_REMINDERS, "$COL_REM_TITLE LIKE ?", arrayOf("%$titlePattern%"))
+    }
+
+    fun getActiveReminders(): List<ReminderRecord> = getAllActiveReminders()
 
     fun getReminderById(id: Long): ReminderRecord? {
         val cursor = readableDatabase.query(
@@ -197,9 +430,9 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
                     title = c.getString(c.getColumnIndexOrThrow(COL_REM_TITLE)),
                     notes = c.getString(c.getColumnIndexOrThrow(COL_REM_NOTES)) ?: "",
                     triggerTimeEpoch = c.getLong(c.getColumnIndexOrThrow(COL_REM_TRIGGER)),
-                    repeatInterval = c.getString(c.getColumnIndexOrThrow(COL_REM_REPEAT)) ?: "NONE",
+                    repeatInterval = c.getString(c.getColumnIndexOrThrow(COL_REM_REPEAT)),
                     isActive = c.getInt(c.getColumnIndexOrThrow(COL_REM_ACTIVE)) == 1,
-                    priority = c.getString(c.getColumnIndexOrThrow(COL_REM_PRIORITY)) ?: "MEDIUM",
+                    priority = c.getString(c.getColumnIndexOrThrow(COL_REM_PRIORITY)),
                     createdAt = c.getLong(c.getColumnIndexOrThrow(COL_REM_CREATED))
                 )
             }
@@ -215,18 +448,10 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
     }
 
     fun setReminderActive(id: Long, active: Boolean): Boolean {
-        val values = ContentValues().apply {
+        val cv = ContentValues().apply {
             put(COL_REM_ACTIVE, if (active) 1 else 0)
         }
-        return writableDatabase.update(TABLE_REMINDERS, values, "$COL_REM_ID = ?", arrayOf(id.toString())) > 0
-    }
-
-    fun deleteReminder(id: Long): Boolean {
-        return writableDatabase.delete(TABLE_REMINDERS, "$COL_REM_ID = ?", arrayOf(id.toString())) > 0
-    }
-
-    fun deleteRemindersByTitle(titlePattern: String): Int {
-        return writableDatabase.delete(TABLE_REMINDERS, "$COL_REM_TITLE LIKE ?", arrayOf("%$titlePattern%"))
+        return writableDatabase.update(TABLE_REMINDERS, cv, "$COL_REM_ID = ?", arrayOf(id.toString())) > 0
     }
 
     // ==================== STUDY NOTES CRUD ====================
@@ -279,12 +504,11 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
 
     fun searchStudyNotes(query: String): List<StudyNoteRecord> {
         val list = mutableListOf<StudyNoteRecord>()
-        val pattern = "%$query%"
         val cursor = readableDatabase.query(
             TABLE_STUDY_NOTES,
             null,
             "$COL_NOTE_TITLE LIKE ? OR $COL_NOTE_SUBJECT LIKE ? OR $COL_NOTE_CONTENT LIKE ?",
-            arrayOf(pattern, pattern, pattern),
+            arrayOf("%$query%", "%$query%", "%$query%"),
             null,
             null,
             "$COL_NOTE_CREATED DESC"
@@ -348,5 +572,382 @@ class MaxDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_N
             }
         }
         return null
+    }
+
+    // ==================== USER MEMORIES CRUD (SECTION 2) ====================
+
+    fun upsertUserMemory(memory: UserMemoryRecord): Long {
+        val cv = ContentValues().apply {
+            put(COL_MEM_KEY, memory.memoryKey.trim().lowercase())
+            put(COL_MEM_CONTENT, memory.content)
+            put(COL_MEM_CATEGORY, memory.category)
+            put(COL_MEM_TAGS, memory.tags)
+            put(COL_MEM_EXPIRY, memory.expiryEpoch)
+            put(COL_MEM_APPROVED, if (memory.isUserApproved) 1 else 0)
+            put(COL_MEM_CREATED, memory.createdAt)
+            put(COL_MEM_UPDATED, System.currentTimeMillis())
+        }
+        return writableDatabase.insertWithOnConflict(
+            TABLE_USER_MEMORIES,
+            null,
+            cv,
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
+    fun searchUserMemories(query: String): List<UserMemoryRecord> {
+        cleanExpiredMemories()
+        val list = mutableListOf<UserMemoryRecord>()
+        val clean = query.trim().lowercase()
+        val cursor = readableDatabase.query(
+            TABLE_USER_MEMORIES,
+            null,
+            "$COL_MEM_KEY LIKE ? OR $COL_MEM_CONTENT LIKE ? OR $COL_MEM_TAGS LIKE ?",
+            arrayOf("%$clean%", "%$clean%", "%$clean%"),
+            null,
+            null,
+            "$COL_MEM_UPDATED DESC"
+        )
+        cursor.use { c ->
+            val idIdx = c.getColumnIndexOrThrow(COL_MEM_ID)
+            val keyIdx = c.getColumnIndexOrThrow(COL_MEM_KEY)
+            val contentIdx = c.getColumnIndexOrThrow(COL_MEM_CONTENT)
+            val catIdx = c.getColumnIndexOrThrow(COL_MEM_CATEGORY)
+            val tagsIdx = c.getColumnIndexOrThrow(COL_MEM_TAGS)
+            val expIdx = c.getColumnIndexOrThrow(COL_MEM_EXPIRY)
+            val appIdx = c.getColumnIndexOrThrow(COL_MEM_APPROVED)
+            val crIdx = c.getColumnIndexOrThrow(COL_MEM_CREATED)
+            val upIdx = c.getColumnIndexOrThrow(COL_MEM_UPDATED)
+
+            while (c.moveToNext()) {
+                list.add(
+                    UserMemoryRecord(
+                        id = c.getLong(idIdx),
+                        memoryKey = c.getString(keyIdx),
+                        content = c.getString(contentIdx),
+                        category = c.getString(catIdx),
+                        tags = c.getString(tagsIdx) ?: "",
+                        expiryEpoch = c.getLong(expIdx),
+                        isUserApproved = c.getInt(appIdx) == 1,
+                        createdAt = c.getLong(crIdx),
+                        updatedAt = c.getLong(upIdx)
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun getAllUserMemories(): List<UserMemoryRecord> {
+        cleanExpiredMemories()
+        val list = mutableListOf<UserMemoryRecord>()
+        val cursor = readableDatabase.query(
+            TABLE_USER_MEMORIES,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "$COL_MEM_UPDATED DESC"
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    UserMemoryRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_MEM_ID)),
+                        memoryKey = c.getString(c.getColumnIndexOrThrow(COL_MEM_KEY)),
+                        content = c.getString(c.getColumnIndexOrThrow(COL_MEM_CONTENT)),
+                        category = c.getString(c.getColumnIndexOrThrow(COL_MEM_CATEGORY)),
+                        tags = c.getString(c.getColumnIndexOrThrow(COL_MEM_TAGS)) ?: "",
+                        expiryEpoch = c.getLong(c.getColumnIndexOrThrow(COL_MEM_EXPIRY)),
+                        isUserApproved = c.getInt(c.getColumnIndexOrThrow(COL_MEM_APPROVED)) == 1,
+                        createdAt = c.getLong(c.getColumnIndexOrThrow(COL_MEM_CREATED)),
+                        updatedAt = c.getLong(c.getColumnIndexOrThrow(COL_MEM_UPDATED))
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun deleteUserMemoryByKey(key: String): Boolean {
+        return writableDatabase.delete(TABLE_USER_MEMORIES, "$COL_MEM_KEY = ?", arrayOf(key.trim().lowercase())) > 0
+    }
+
+    fun cleanExpiredMemories(): Int {
+        val now = System.currentTimeMillis()
+        return writableDatabase.delete(TABLE_USER_MEMORIES, "$COL_MEM_EXPIRY > 0 AND $COL_MEM_EXPIRY <= ?", arrayOf(now.toString()))
+    }
+
+    // ==================== PROJECT TASKS CRUD (SECTION 2) ====================
+
+    fun insertProjectTask(task: ProjectTaskRecord): Long {
+        val cv = ContentValues().apply {
+            put(COL_TASK_PROJECT, task.projectName.trim())
+            put(COL_TASK_TITLE, task.taskTitle.trim())
+            put(COL_TASK_STATUS, task.status)
+            put(COL_TASK_NOTES, task.notes)
+            put(COL_TASK_CREATED, task.createdAt)
+            put(COL_TASK_UPDATED, task.updatedAt)
+        }
+        return writableDatabase.insert(TABLE_PROJECT_TASKS, null, cv)
+    }
+
+    fun getTasksForProject(projectName: String): List<ProjectTaskRecord> {
+        val list = mutableListOf<ProjectTaskRecord>()
+        val cursor = readableDatabase.query(
+            TABLE_PROJECT_TASKS,
+            null,
+            "$COL_TASK_PROJECT LIKE ?",
+            arrayOf("%${projectName.trim()}%"),
+            null,
+            null,
+            "$COL_TASK_UPDATED DESC"
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    ProjectTaskRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_TASK_ID)),
+                        projectName = c.getString(c.getColumnIndexOrThrow(COL_TASK_PROJECT)),
+                        taskTitle = c.getString(c.getColumnIndexOrThrow(COL_TASK_TITLE)),
+                        status = c.getString(c.getColumnIndexOrThrow(COL_TASK_STATUS)),
+                        notes = c.getString(c.getColumnIndexOrThrow(COL_TASK_NOTES)) ?: "",
+                        createdAt = c.getLong(c.getColumnIndexOrThrow(COL_TASK_CREATED)),
+                        updatedAt = c.getLong(c.getColumnIndexOrThrow(COL_TASK_UPDATED))
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun getAllProjects(): List<String> {
+        val list = mutableListOf<String>()
+        val cursor = readableDatabase.rawQuery("SELECT DISTINCT $COL_TASK_PROJECT FROM $TABLE_PROJECT_TASKS ORDER BY $COL_TASK_PROJECT ASC", null)
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(c.getString(0))
+            }
+        }
+        return list
+    }
+
+    fun updateProjectTaskStatus(id: Long, newStatus: String): Boolean {
+        val cv = ContentValues().apply {
+            put(COL_TASK_STATUS, newStatus)
+            put(COL_TASK_UPDATED, System.currentTimeMillis())
+        }
+        return writableDatabase.update(TABLE_PROJECT_TASKS, cv, "$COL_TASK_ID = ?", arrayOf(id.toString())) > 0
+    }
+
+    // ==================== CONVERSATION RECORDS CRUD (SECTION 2 & 17) ====================
+
+    fun insertConversationRecord(record: ConversationRecord): Long {
+        val cv = ContentValues().apply {
+            put(COL_CONV_SESSION, record.sessionId)
+            put(COL_CONV_ROLE, record.role)
+            put(COL_CONV_MSG, record.message)
+            put(COL_CONV_LANG, record.language)
+            put(COL_CONV_TIME, record.timestamp)
+            put(COL_CONV_SUMMARY, record.summary)
+            put(COL_CONV_SENSITIVE, if (record.isSensitive) 1 else 0)
+        }
+        return writableDatabase.insert(TABLE_CONVERSATIONS, null, cv)
+    }
+
+    fun searchConversationRecords(query: String, limit: Int = 20): List<ConversationRecord> {
+        val list = mutableListOf<ConversationRecord>()
+        val clean = query.trim()
+        val cursor = readableDatabase.query(
+            TABLE_CONVERSATIONS,
+            null,
+            "$COL_CONV_MSG LIKE ? AND $COL_CONV_SENSITIVE = 0",
+            arrayOf("%$clean%"),
+            null,
+            null,
+            "$COL_CONV_TIME DESC",
+            limit.toString()
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    ConversationRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_CONV_ID)),
+                        sessionId = c.getString(c.getColumnIndexOrThrow(COL_CONV_SESSION)),
+                        role = c.getString(c.getColumnIndexOrThrow(COL_CONV_ROLE)),
+                        message = c.getString(c.getColumnIndexOrThrow(COL_CONV_MSG)),
+                        language = c.getString(c.getColumnIndexOrThrow(COL_CONV_LANG)),
+                        timestamp = c.getLong(c.getColumnIndexOrThrow(COL_CONV_TIME)),
+                        summary = c.getString(c.getColumnIndexOrThrow(COL_CONV_SUMMARY)) ?: "",
+                        isSensitive = c.getInt(c.getColumnIndexOrThrow(COL_CONV_SENSITIVE)) == 1
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun getConversationsForDateRange(startEpoch: Long, endEpoch: Long): List<ConversationRecord> {
+        val list = mutableListOf<ConversationRecord>()
+        val cursor = readableDatabase.query(
+            TABLE_CONVERSATIONS,
+            null,
+            "$COL_CONV_TIME >= ? AND $COL_CONV_TIME <= ? AND $COL_CONV_SENSITIVE = 0",
+            arrayOf(startEpoch.toString(), endEpoch.toString()),
+            null,
+            null,
+            "$COL_CONV_TIME ASC"
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    ConversationRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_CONV_ID)),
+                        sessionId = c.getString(c.getColumnIndexOrThrow(COL_CONV_SESSION)),
+                        role = c.getString(c.getColumnIndexOrThrow(COL_CONV_ROLE)),
+                        message = c.getString(c.getColumnIndexOrThrow(COL_CONV_MSG)),
+                        language = c.getString(c.getColumnIndexOrThrow(COL_CONV_LANG)),
+                        timestamp = c.getLong(c.getColumnIndexOrThrow(COL_CONV_TIME)),
+                        summary = c.getString(c.getColumnIndexOrThrow(COL_CONV_SUMMARY)) ?: "",
+                        isSensitive = c.getInt(c.getColumnIndexOrThrow(COL_CONV_SENSITIVE)) == 1
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    // ==================== HEALTH INCIDENTS CRUD (SECTION 4 SELF-HEALING) ====================
+
+    fun insertHealthIncident(incident: HealthIncidentRecord): Long {
+        val cv = ContentValues().apply {
+            put(COL_INC_COMPONENT, incident.component)
+            put(COL_INC_TYPE, incident.errorType)
+            put(COL_INC_SEVERITY, incident.severity)
+            put(COL_INC_MSG, incident.message)
+            put(COL_INC_LEVEL, incident.recoveryLevel)
+            put(COL_INC_RESOLUTION, incident.resolution)
+            put(COL_INC_TIME, incident.timestamp)
+        }
+        return writableDatabase.insert(TABLE_HEALTH_INCIDENTS, null, cv)
+    }
+
+    fun getRecentIncidents(limit: Int = 30): List<HealthIncidentRecord> {
+        val list = mutableListOf<HealthIncidentRecord>()
+        val cursor = readableDatabase.query(
+            TABLE_HEALTH_INCIDENTS,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "$COL_INC_TIME DESC",
+            limit.toString()
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    HealthIncidentRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_INC_ID)),
+                        component = c.getString(c.getColumnIndexOrThrow(COL_INC_COMPONENT)),
+                        errorType = c.getString(c.getColumnIndexOrThrow(COL_INC_TYPE)),
+                        severity = c.getString(c.getColumnIndexOrThrow(COL_INC_SEVERITY)),
+                        message = c.getString(c.getColumnIndexOrThrow(COL_INC_MSG)),
+                        recoveryLevel = c.getInt(c.getColumnIndexOrThrow(COL_INC_LEVEL)),
+                        resolution = c.getString(c.getColumnIndexOrThrow(COL_INC_RESOLUTION)),
+                        timestamp = c.getLong(c.getColumnIndexOrThrow(COL_INC_TIME))
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    // ==================== COMMAND ANALYTICS & SYNONYMS CRUD (SECTION 15) ====================
+
+    fun insertCommandAnalytics(record: CommandAnalyticsRecord): Long {
+        val cv = ContentValues().apply {
+            put(COL_ANA_COMMAND, record.rawCommand)
+            put(COL_ANA_INTENT, record.normalizedIntent)
+            put(COL_ANA_EXEC_MS, record.executionTimeMs)
+            put(COL_ANA_SUCCESS, if (record.success) 1 else 0)
+            put(COL_ANA_REASON, record.failureReason)
+            put(COL_ANA_LANG, record.language)
+            put(COL_ANA_TIME, record.timestamp)
+        }
+        return writableDatabase.insert(TABLE_COMMAND_ANALYTICS, null, cv)
+    }
+
+    fun getOverallSuccessRate(): Double {
+        val cursor = readableDatabase.rawQuery("SELECT AVG($COL_ANA_SUCCESS) FROM $TABLE_COMMAND_ANALYTICS", null)
+        cursor.use { c ->
+            if (c.moveToFirst()) {
+                return c.getDouble(0) * 100.0
+            }
+        }
+        return 100.0
+    }
+
+    fun recordOrIncrementSynonym(phrase: String, canonicalIntent: String) {
+        val clean = phrase.trim().lowercase()
+        writableDatabase.execSQL(
+            """
+            INSERT INTO $TABLE_LEARNED_SYNONYMS ($COL_SYN_PHRASE, $COL_SYN_INTENT, $COL_SYN_COUNT, $COL_SYN_CONFIRMED, $COL_SYN_LAST_USED)
+            VALUES (?, ?, 1, 1, ?)
+            ON CONFLICT($COL_SYN_PHRASE) DO UPDATE SET
+                $COL_SYN_COUNT = $COL_SYN_COUNT + 1,
+                $COL_SYN_LAST_USED = ?
+            """.trimIndent(),
+            arrayOf<Any>(clean, canonicalIntent, System.currentTimeMillis(), System.currentTimeMillis())
+        )
+    }
+
+    fun getCanonicalIntentForPhrase(phrase: String): String? {
+        val clean = phrase.trim().lowercase()
+        val cursor = readableDatabase.query(
+            TABLE_LEARNED_SYNONYMS,
+            arrayOf(COL_SYN_INTENT),
+            "$COL_SYN_PHRASE = ?",
+            arrayOf(clean),
+            null,
+            null,
+            null,
+            "1"
+        )
+        cursor.use { c ->
+            if (c.moveToFirst()) {
+                return c.getString(0)
+            }
+        }
+        return null
+    }
+
+    fun getAllLearnedSynonyms(): List<LearnedSynonymRecord> {
+        val list = mutableListOf<LearnedSynonymRecord>()
+        val cursor = readableDatabase.query(
+            TABLE_LEARNED_SYNONYMS,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "$COL_SYN_COUNT DESC"
+        )
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                list.add(
+                    LearnedSynonymRecord(
+                        id = c.getLong(c.getColumnIndexOrThrow(COL_SYN_ID)),
+                        phrase = c.getString(c.getColumnIndexOrThrow(COL_SYN_PHRASE)),
+                        canonicalIntent = c.getString(c.getColumnIndexOrThrow(COL_SYN_INTENT)),
+                        usageCount = c.getInt(c.getColumnIndexOrThrow(COL_SYN_COUNT)),
+                        isConfirmed = c.getInt(c.getColumnIndexOrThrow(COL_SYN_CONFIRMED)) == 1,
+                        lastUsedAt = c.getLong(c.getColumnIndexOrThrow(COL_SYN_LAST_USED))
+                    )
+                )
+            }
+        }
+        return list
     }
 }

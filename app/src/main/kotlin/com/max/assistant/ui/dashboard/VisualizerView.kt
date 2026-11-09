@@ -182,6 +182,9 @@ fun ModernFluidAiOrb(
         AssistantState.THINKING, AssistantState.PROCESSING -> Triple(Color(0xFFBD00FF), Color(0xFF00E5FF), Color(0xFF240638))
         AssistantState.SPEAKING -> Triple(Color(0xFF00E5FF), Color(0xFF76FF03), Color(0xFF042D3B))
         AssistantState.AWAITING_PIN -> Triple(Color(0xFFFFB74D), Color(0xFFFF9800), Color(0xFF2A1B05))
+        AssistantState.VERIFYING -> Triple(Color(0xFF00E5FF), Color(0xFF7C4DFF), Color(0xFF051B2E))
+        AssistantState.RECOVERING -> Triple(Color(0xFFFF9100), Color(0xFFFFAB40), Color(0xFF2D1603))
+        AssistantState.SCREEN_SHARING -> Triple(Color(0xFFFF1744), Color(0xFFFF5252), Color(0xFF2B050C))
         else -> Triple(Color(0xFF00E5FF), Color(0xFF2979FF), Color(0xFF052233))
     }
 
@@ -904,6 +907,9 @@ fun CyberHelmetVisualizer(
         AssistantState.THINKING, AssistantState.PROCESSING -> Triple(Color(0xFFD946EF), Color(0xFF9333EA), Color(0xFF1A0B2E))
         AssistantState.SPEAKING -> Triple(Color(0xFF38BDF8), Color(0xFF0284C7), Color(0xFF051B2E))
         AssistantState.AWAITING_PIN -> Triple(Color(0xFFFACC15), Color(0xFFCA8A04), Color(0xFF191404))
+        AssistantState.VERIFYING -> Triple(Color(0xFF00F0FF), Color(0xFF818CF8), Color(0xFF031422))
+        AssistantState.RECOVERING -> Triple(Color(0xFFFB923C), Color(0xFFEA580C), Color(0xFF1C0D05))
+        AssistantState.SCREEN_SHARING -> Triple(Color(0xFFF43F5E), Color(0xFFBE123C), Color(0xFF23050C))
         else -> Triple(Color(0xFF00E5FF), Color(0xFF0284C7), Color(0xFF04101D))
     }
 
