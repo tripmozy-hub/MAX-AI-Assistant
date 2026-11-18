@@ -15,9 +15,26 @@ android {
     versionName = "2.0.0"
   }
 
+  signingConfigs {
+    create("release") {
+      storeFile = file("max-release.keystore")
+      storePassword = "maxpassword"
+      keyAlias = "maxkey"
+      keyPassword = "maxpassword"
+      enableV1Signing = true
+      enableV2Signing = true
+      enableV3Signing = true
+      enableV4Signing = false
+    }
+  }
+
   buildTypes {
+    debug {
+      signingConfig = signingConfigs.getByName("release")
+    }
     release {
       isMinifyEnabled = false
+      signingConfig = signingConfigs.getByName("release")
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
   }
