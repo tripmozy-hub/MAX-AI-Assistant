@@ -20,6 +20,7 @@ import com.max.assistant.launcher.AppLauncher
 import com.max.assistant.launcher.LaunchResult
 import com.max.assistant.planner.MultiStepPlan
 import com.max.assistant.planner.TaskPlanner
+import com.max.assistant.protection.PaymentProtectionManager
 import com.max.assistant.speech.MaxSpeechManager
 import com.max.assistant.telephony.PhoneActionResult
 import com.max.assistant.telephony.PhoneCommunicationManager
@@ -950,15 +951,33 @@ class MaxForegroundService : Service() {
                 }
             }
             is BrainDecision.ClickScreenElement -> {
+                if (PaymentProtectionManager.isPaymentAction(decision.target)) {
+                    val msg = PaymentProtectionManager.getBlockedPaymentMessage(decision.language)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.FAILED)
+                    speakWithCoordination(msg, decision.language)
+                    conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, msg, decision.language)
+                    return
+                }
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
                 serviceScope.launch {
-                    val clicked = appInteractionManager.openWhatsAppChat(decision.target) ||
-                            accessibilityController.clickByText(decision.target) ||
-                            accessibilityController.clickByDescription(decision.target)
+                    val clicked = accessibilityController.clickByText(decision.target) ||
+                            accessibilityController.clickByDescription(decision.target) ||
+                            accessibilityController.clickByViewId(decision.target) ||
+                            appInteractionManager.openWhatsAppChat(decision.target)
                     val msg = if (clicked) {
-                        "Clicked '${decision.target}', Sir."
+                        when (decision.language) {
+                            VoiceLanguage.HINDI -> "जी सर, '${decision.target}' पर क्लिक कर दिया है।"
+                            VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, '${decision.target}'-এ ক্লিক করা হয়েছে।"
+                            VoiceLanguage.HINGLISH -> "Sir, '${decision.target}' par click kar diya hai."
+                            else -> "Clicked '${decision.target}', Sir."
+                        }
                     } else {
-                        "Could not locate element '${decision.target}' on the visible screen, Sir."
+                        when (decision.language) {
+                            VoiceLanguage.HINDI -> "सर, स्क्रीन पर '${decision.target}' नहीं मिला।"
+                            VoiceLanguage.BENGALI -> "স্যার, স্ক্রিনে '${decision.target}' পাওয়া যায়নি।"
+                            VoiceLanguage.HINGLISH -> "Sir, screen par '${decision.target}' nahi mila."
+                            else -> "Could not locate element '${decision.target}' on the visible screen, Sir."
+                        }
                     }
                     speechManager.setAssistantState(if (clicked) com.max.assistant.speech.AssistantState.COMPLETED else com.max.assistant.speech.AssistantState.FAILED)
                     speakWithCoordination(msg, decision.language)

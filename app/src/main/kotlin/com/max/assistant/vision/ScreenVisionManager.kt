@@ -114,12 +114,19 @@ class ScreenVisionManager(
             if (bmp != null) return bmp
         }
         if (accessibilityController.isServiceActive) {
-            return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-                accessibilityController.takeScreenshot { bmp ->
-                    if (cont.isActive) {
-                        cont.resume(bmp) {}
+            return try {
+                kotlinx.coroutines.withTimeoutOrNull(2500L) {
+                    kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+                        accessibilityController.takeScreenshot { bmp ->
+                            if (cont.isActive) {
+                                cont.resume(bmp) {}
+                            }
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Screen capture via Accessibility timed out or failed: ${e.message}")
+                null
             }
         }
         return null
@@ -129,11 +136,15 @@ class ScreenVisionManager(
         prompt: String,
         language: VoiceLanguage = VoiceLanguage.HINGLISH
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        // 1. Strict Gallery Protection Interception
+        // 1. Strict Gallery and Financial App Protection Interception
         val rootNode = accessibilityController.getRootNode()
         val pkg = rootNode?.packageName?.toString() ?: ""
         if (com.max.assistant.protection.GalleryProtectionManager.isGalleryPackage(pkg)) {
             val blockMsg = "Sorry, I don't have permission to access your Gallery."
+            return@withContext Pair(false, blockMsg)
+        }
+        if (com.max.assistant.protection.PaymentProtectionManager.isPaymentPackage(pkg)) {
+            val blockMsg = "Sir, for your financial security and privacy, screen vision is restricted on banking and payment applications."
             return@withContext Pair(false, blockMsg)
         }
 

@@ -309,8 +309,13 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         activeInstance = this
         val svc = foregroundService ?: MaxForegroundService.activeInstance
-        if (svc != null && svc.serviceController.isFullyShutdown()) {
-            svc.serviceController.reactivate(svc.voiceEngine.settings.value.outputLanguage)
+        if (svc != null) {
+            if (svc.serviceController.isFullyShutdown()) {
+                svc.serviceController.reactivate(svc.voiceEngine.settings.value.outputLanguage)
+            }
+            if (svc.speechManager.isMuted) {
+                svc.setMuted(false)
+            }
         }
     }
 

@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.provider.Settings
 import android.util.Log
 import com.max.assistant.protection.GalleryProtectionManager
+import com.max.assistant.protection.PaymentProtectionManager
 
 sealed class LaunchResult {
     data class Success(val appName: String, val packageName: String) : LaunchResult()
@@ -157,6 +158,12 @@ class AppLauncher(private val context: Context) {
         if (GalleryProtectionManager.shouldBlockVoiceLaunch(trimmed)) {
             Log.w(TAG, "Access to gallery/photos denied, Sir: $query")
             return LaunchResult.Blocked("माफ़ कीजिए सर, गैलरी और तस्वीरों तक पहुंच सुरक्षा नीति द्वारा प्रतिबंधित है।")
+        }
+
+        // 1b. Strict Payment Protection check
+        if (PaymentProtectionManager.isPaymentRequest(trimmed)) {
+            Log.w(TAG, "Payment execution launch denied, Sir: $query")
+            return LaunchResult.Blocked(PaymentProtectionManager.getBlockedPaymentMessage(com.max.assistant.tts.VoiceLanguage.HINGLISH))
         }
 
         // Clean wake words and prefixes repeatedly

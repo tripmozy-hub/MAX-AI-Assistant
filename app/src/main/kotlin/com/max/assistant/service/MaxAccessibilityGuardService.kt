@@ -5,6 +5,7 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.max.assistant.protection.GalleryProtectionManager
+import com.max.assistant.protection.PaymentProtectionManager
 
 class MaxAccessibilityGuardService : AccessibilityService() {
 
@@ -66,6 +67,14 @@ class MaxAccessibilityGuardService : AccessibilityService() {
                     service.voiceEngine.speak("Security alert. Gallery launch intercepted and blocked.")
                 }
                 return
+            }
+
+            // 1b. Payment & Financial Application Safety Isolation
+            if (PaymentProtectionManager.isPaymentPackage(packageName)) {
+                if (pendingAutoSendWhatsApp) {
+                    pendingAutoSendWhatsApp = false
+                    Log.w(TAG, "Security Guard: Suppressed background automation due to active financial app: $packageName")
+                }
             }
         }
 

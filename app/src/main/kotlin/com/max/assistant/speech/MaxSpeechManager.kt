@@ -120,6 +120,7 @@ class MaxSpeechManager(
     private var currentSessionId: Long = 0
     private var sessionHandled = false
     private var busyErrorCount = 0
+    private var clientErrorCount = 0
     private var awaitingCommandRetryCount = 0
 
     // 15-second Inactivity Timeout Management
@@ -174,8 +175,8 @@ class MaxSpeechManager(
         if (partial.length < 2) return@Runnable
 
         val elapsed = System.currentTimeMillis() - lastVoiceActivityTimestamp
-        // If at least 550ms of silence have elapsed since last voice activity
-        if (elapsed >= 550L && !isEndpointTriggered) {
+        // If at least 450ms of silence have elapsed since last voice activity
+        if (elapsed >= 450L && !isEndpointTriggered) {
             isEndpointTriggered = true
             Log.i(TAG, "Fast auto-endpoint triggered after ${elapsed}ms silence for: '$partial'")
             _rmsLevel.value = 0f
@@ -189,7 +190,7 @@ class MaxSpeechManager(
                 Log.d(TAG, "autoEndpoint stopListening: ${e.message}")
             }
 
-            // Fallback: if onResults is not invoked by the engine within 800ms, finalize with partial
+            // Fast fallback: if onResults is not invoked by the engine within 350ms, finalize with partial
             handler.postDelayed({
                 if (!sessionHandled && !isPausedForSpeaking && !isPausedForProcessing && !isMuted && !isStopped && isListeningLoopActive) {
                     Log.i(TAG, "Fallback: Finalizing command from partial results: '$partial'")
@@ -198,11 +199,11 @@ class MaxSpeechManager(
                     pauseListening()
                     handleRecognizedSpeech(partial)
                 }
-            }, 800L)
+            }, 350L)
         }
     }
 
-    fun scheduleAutoEndpoint(delayMs: Long = 600L) {
+    fun scheduleAutoEndpoint(delayMs: Long = 450L) {
         handler.removeCallbacks(autoEndpointRunnable)
         handler.postDelayed(autoEndpointRunnable, delayMs)
     }
@@ -249,6 +250,7 @@ class MaxSpeechManager(
                 }
                 Log.i(TAG, "Created Multi-lingual SpeechRecognizer for MAX.")
                 busyErrorCount = 0
+                clientErrorCount = 0
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize SpeechRecognizer: ${e.message}")
             }
@@ -338,7 +340,7 @@ class MaxSpeechManager(
                         resetInactivityTimer()
                     }
                     if (lastPartialText.isNotBlank() && !isEndpointTriggered) {
-                        scheduleAutoEndpoint(550L)
+                        scheduleAutoEndpoint(450L)
                     }
                 }
             }
@@ -349,14 +351,28 @@ class MaxSpeechManager(
         override fun onEndOfSpeech() {
             _rmsLevel.value = 0f
             cancelAutoEndpoint()
+            val partial = lastPartialText.trim()
             if (_assistantState.value == AssistantState.LISTENING_FOR_COMMAND ||
-                (_assistantState.value == AssistantState.LISTENING_FOR_WAKE_WORD && lastPartialText.isNotBlank())) {
+                (_assistantState.value == AssistantState.LISTENING_FOR_WAKE_WORD && (containsWakeWord(partial) || isLikelyCommand(partial.lowercase(Locale.ROOT))))) {
                 _assistantState.value = AssistantState.PROCESSING
             }
             try {
                 speechRecognizer?.stopListening()
             } catch (e: Exception) {
                 Log.d(TAG, "stopListening on onEndOfSpeech: ${e.message}")
+            }
+
+            // Immediately schedule fast finalization from partial speech if engine doesn't fire onResults promptly
+            if (partial.length >= 2 && !sessionHandled) {
+                handler.postDelayed({
+                    if (!sessionHandled && !isPausedForSpeaking && !isPausedForProcessing && !isMuted && !isStopped && isListeningLoopActive) {
+                        Log.i(TAG, "onEndOfSpeech fast fallback: Finalizing command from partial: '$partial'")
+                        sessionHandled = true
+                        _assistantState.value = AssistantState.PROCESSING
+                        pauseListening()
+                        handleRecognizedSpeech(partial)
+                    }
+                }, 350L)
             }
         }
 
@@ -403,15 +419,27 @@ class MaxSpeechManager(
                 return
             }
 
-            // Handle speech timeout when waiting for command with 15-second wall-clock timer
-            if (isAwaitingCommand && (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH)) {
-                val elapsed = System.currentTimeMillis() - awaitingCommandStartTime
-                if (elapsed >= INACTIVITY_STANDBY_TIMEOUT_MS) {
-                    cancelInactivityTimer()
-                    handleInactivityTimeout()
+            // Handle speech timeout or no-match: if user already spoke partial text, finalize it immediately!
+            if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT || error == SpeechRecognizer.ERROR_NO_MATCH) {
+                val partial = lastPartialText.trim()
+                if (partial.length >= 2 && !sessionHandled) {
+                    Log.i(TAG, "SpeechRecognizer error ($errorName) but captured partial exists: '$partial'. Finalizing command!")
+                    sessionHandled = true
+                    _assistantState.value = AssistantState.PROCESSING
+                    pauseListening()
+                    handleRecognizedSpeech(partial)
                     return
-                } else {
-                    Log.d(TAG, "Awaiting command: ${elapsed / 1000}s of 15s elapsed. Continuing listening loop.")
+                }
+
+                if (isAwaitingCommand) {
+                    val elapsed = System.currentTimeMillis() - awaitingCommandStartTime
+                    if (elapsed >= INACTIVITY_STANDBY_TIMEOUT_MS) {
+                        cancelInactivityTimer()
+                        handleInactivityTimeout()
+                        return
+                    } else {
+                        Log.d(TAG, "Awaiting command: ${elapsed / 1000}s of 15s elapsed. Continuing listening loop.")
+                    }
                 }
             }
 
@@ -420,6 +448,7 @@ class MaxSpeechManager(
                 busyErrorCount++
                 if (busyErrorCount >= 2) {
                     Log.w(TAG, "Recognizer stuck busy, rebuilding instance cleanly...")
+                    busyErrorCount = 0
                     initializeRecognizer()
                     handler.postDelayed({
                         if (isListeningLoopActive && !isPausedForSpeaking && !isMuted) {
@@ -432,11 +461,30 @@ class MaxSpeechManager(
                 busyErrorCount = 0
             }
 
+            // Recover from client error loop (code 5) by cleanly recreating recognizer
+            if (error == SpeechRecognizer.ERROR_CLIENT) {
+                clientErrorCount++
+                if (clientErrorCount >= 2) {
+                    Log.w(TAG, "Recognizer client error loop detected ($clientErrorCount), rebuilding instance cleanly...")
+                    clientErrorCount = 0
+                    initializeRecognizer()
+                    handler.postDelayed({
+                        if (isListeningLoopActive && !isPausedForSpeaking && !isMuted) {
+                            restartListening()
+                        }
+                    }, 800L)
+                    return
+                }
+            } else {
+                clientErrorCount = 0
+            }
+
             if (isListeningLoopActive && !isStopped && !isMuted) {
                 val delay = when (error) {
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 500L
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 600L
+                    SpeechRecognizer.ERROR_CLIENT -> 600L
                     SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 200L
-                    else -> 350L
+                    else -> 400L
                 }
                 handler.postDelayed({
                     if (isListeningLoopActive && !isPausedForSpeaking && !isMuted && !isStopped) {
@@ -511,9 +559,9 @@ class MaxSpeechManager(
 
             if (isAwaitingCommand) {
                 resetInactivityTimer()
-                scheduleAutoEndpoint(550L)
+                scheduleAutoEndpoint(450L)
             } else if (containsWakeWord(partial) || isLikelyCommand(partial.lowercase(Locale.ROOT))) {
-                scheduleAutoEndpoint(600L)
+                scheduleAutoEndpoint(500L)
             }
 
             // Only emergency stop commands are intercepted in partials to avoid cutting off longer sentences
@@ -683,6 +731,13 @@ class MaxSpeechManager(
                     // Only wake word spoken ("Hey MAX", "मैक्स"): acknowledge and await next command for 15s
                     triggerWakeWord()
                 }
+            } else if (continuousConversationMode && (isLikelyCommand(lower) || isValidUtterance(text))) {
+                // In continuous conversation mode: accept recognized commands and questions even without explicit wake-word prefix
+                Log.i(TAG, "Continuous conversation mode: accepting command without wake word: '$text'")
+                cancelInactivityTimer()
+                _assistantState.value = AssistantState.PROCESSING
+                pauseListening()
+                onCommandReceived(text)
             } else {
                 // In Standby waiting for wake command: ignore background speech
                 Log.d(TAG, "Standby mode: waiting for wake command, ignoring: '$text'")
@@ -695,11 +750,11 @@ class MaxSpeechManager(
 
     private fun isValidUtterance(text: String): Boolean {
         val trimmed = text.trim()
-        if (trimmed.length < 2) return false
+        if (trimmed.length < 3) return false
         val lower = trimmed.lowercase(Locale.ROOT)
-        val fillerNoises = setOf("uh", "um", "ah", "er", "mm", "hmm", "haan", "hmmm", "oh")
+        val fillerNoises = setOf("uh", "um", "ah", "er", "mm", "hmm", "haan", "hmmm", "oh", "ha", "acha", "theek")
         if (fillerNoises.contains(lower)) return false
-        return true
+        return lower.contains(" ") || isLikelyCommand(lower)
     }
 
     private fun isLikelyCommand(lower: String): Boolean {
@@ -733,6 +788,13 @@ class MaxSpeechManager(
             lower.contains("torch") || lower.contains("flashlight") || lower.contains("alarm") ||
             lower.contains("अलार्म") || lower.contains("camera") || lower.contains("कैमरा") ||
             lower.contains("batao") || lower.contains("बताओ") || lower.contains("kya tum") || lower.contains("क्या तुम")
+        ) return true
+
+        // 5. Screen vision, app control & UI automation queries
+        if (lower.contains("screen") || lower.contains("vision") || lower.contains("dekh") ||
+            lower.contains("kam kar") || lower.contains("kaam kar") || lower.contains("click") ||
+            lower.contains("scroll") || lower.contains("tap") || lower.contains("dabao") ||
+            lower.contains("back") || lower.contains("peeche") || lower.contains("home")
         ) return true
 
         return false

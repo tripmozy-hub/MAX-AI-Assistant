@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import com.max.assistant.protection.PaymentProtectionManager
 import com.max.assistant.service.MaxAccessibilityGuardService
 
 data class UiElement(
@@ -62,6 +63,10 @@ class AndroidAccessibilityController(private val context: Context) {
     }
 
     fun clickByText(targetText: String, exact: Boolean = false): Boolean {
+        if (PaymentProtectionManager.isPaymentAction(targetText)) {
+            Log.w(TAG, "Blocked automated click matching payment action: '$targetText'")
+            return false
+        }
         val root = getRootNode() ?: return false
         try {
             val matches = root.findAccessibilityNodeInfosByText(targetText)
@@ -88,6 +93,10 @@ class AndroidAccessibilityController(private val context: Context) {
     }
 
     fun clickByDescription(description: String, exact: Boolean = false): Boolean {
+        if (PaymentProtectionManager.isPaymentAction(description)) {
+            Log.w(TAG, "Blocked automated click matching payment description: '$description'")
+            return false
+        }
         val root = getRootNode() ?: return false
         val allElements = mutableListOf<UiElement>()
         collectAllElements(root, allElements)
@@ -108,6 +117,10 @@ class AndroidAccessibilityController(private val context: Context) {
     }
 
     fun clickByViewId(viewId: String): Boolean {
+        if (PaymentProtectionManager.isPaymentAction(viewId)) {
+            Log.w(TAG, "Blocked automated click matching payment viewId: '$viewId'")
+            return false
+        }
         val root = getRootNode() ?: return false
         try {
             val matches = root.findAccessibilityNodeInfosByViewId(viewId)
@@ -139,6 +152,19 @@ class AndroidAccessibilityController(private val context: Context) {
     }
 
     fun clickNode(node: AccessibilityNodeInfo): Boolean {
+        if (PaymentProtectionManager.isPaymentNode(node)) {
+            Log.w(TAG, "Blocked automated click on payment node: text='${node.text}', desc='${node.contentDescription}'")
+            return false
+        }
+        val currentPkg = getRootNode()?.packageName?.toString()
+        if (PaymentProtectionManager.isPaymentPackage(currentPkg)) {
+            val nodeText = node.text?.toString() ?: ""
+            val nodeDesc = node.contentDescription?.toString() ?: ""
+            if (PaymentProtectionManager.isPaymentAction(nodeText) || PaymentProtectionManager.isPaymentAction(nodeDesc)) {
+                Log.w(TAG, "Blocked automated click inside payment package $currentPkg: '$nodeText' / '$nodeDesc'")
+                return false
+            }
+        }
         var curr: AccessibilityNodeInfo? = node
         while (curr != null) {
             if (curr.isClickable) {
@@ -158,6 +184,11 @@ class AndroidAccessibilityController(private val context: Context) {
 
     fun typeText(text: String, targetField: AccessibilityNodeInfo? = null, append: Boolean = false): Boolean {
         val root = getRootNode() ?: return false
+        val currentPkg = root.packageName?.toString()
+        if (PaymentProtectionManager.isPaymentPackage(currentPkg)) {
+            Log.w(TAG, "Blocked automated text input inside financial app: $currentPkg")
+            return false
+        }
         val field = targetField ?: findFirstEditableNode(root)
         if (field != null) {
             try {

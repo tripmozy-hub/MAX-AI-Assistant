@@ -94,7 +94,7 @@ fun FuturisticDashboard(
     var showDiagnosticDialog by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
 
-    // 0 = Modern Fluid Orb (Default, Simple & Attractive), 1 = JARVIS HUD, 2 = Holographic Core, 3 = Cyber Silver Helmet
+    // 0 = Modern Fluid Orb, 1 = JARVIS HUD, 2 = Holographic Core, 3 = Cyber Silver Helmet
     var visualizerFaceMode by remember { mutableStateOf(0) }
 
     // Interactive scale animation when tapping center orb
@@ -240,7 +240,7 @@ fun FuturisticDashboard(
                         )
                     }
 
-                    // Face Switcher Button (Modern Fluid Orb <-> JARVIS HUD <-> Holographic Core <-> Cyber Silver Helmet)
+                    // Face Switcher Button (Fluid Orb <-> JARVIS HUD <-> Holographic Core <-> Cyber Helmet)
                     IconButton(
                         onClick = { visualizerFaceMode = (visualizerFaceMode + 1) % 4 },
                         modifier = Modifier

@@ -18,6 +18,7 @@ import com.max.assistant.launcher.AppLauncher
 import com.max.assistant.launcher.LaunchResult
 import com.max.assistant.productivity.NotesAndTasksManager
 import com.max.assistant.protection.GalleryProtectionManager
+import com.max.assistant.protection.PaymentProtectionManager
 import com.max.assistant.telephony.PhoneCommunicationManager
 import com.max.assistant.tts.VoiceLanguage
 import com.max.assistant.util.SystemStatusManager
@@ -76,6 +77,10 @@ class AndroidCommandExecutor(
                 else -> "I apologize Sir, access to the photo gallery is strictly restricted by security protocol."
             }
             return CommandExecutionResult.Blocked(blockMsg)
+        }
+
+        if (PaymentProtectionManager.isPaymentRequest(query)) {
+            return CommandExecutionResult.Blocked(PaymentProtectionManager.getBlockedPaymentMessage(targetLanguage))
         }
 
         return when (val res = appLauncher.launchAppByVoice(query)) {

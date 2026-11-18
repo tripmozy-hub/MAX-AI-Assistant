@@ -5,6 +5,7 @@ import com.max.assistant.executor.VolumeDirection
 import com.max.assistant.planner.MultiStepPlan
 import com.max.assistant.planner.PlannedStep
 import com.max.assistant.protection.GalleryProtectionManager
+import com.max.assistant.protection.PaymentProtectionManager
 import com.max.assistant.tts.VoiceLanguage
 import com.max.assistant.util.LanguageDetector
 import java.text.SimpleDateFormat
@@ -188,6 +189,12 @@ class MaxAiBrain(
                 VoiceLanguage.BENGALI -> "ক্ষমা করবেন স্যার, গ্যালারি এবং ব্যক্তিগত ছবি সুরক্ষা নীতি দ্বারা নিষিদ্ধ।"
                 else -> "Sorry Sir, access to the photo gallery is strictly restricted by security protocol. I don't have permission to access your gallery."
             }
+            return BrainDecision.SpeakResponse(response, targetLang)
+        }
+
+        // 1b. Strict Payment Protection Interception (Payments unconditionally disabled for financial security)
+        if (PaymentProtectionManager.isPaymentRequest(trimmed) || PaymentProtectionManager.isPaymentRequest(cleanLower)) {
+            val response = PaymentProtectionManager.getBlockedPaymentMessage(targetLang)
             return BrainDecision.SpeakResponse(response, targetLang)
         }
 
@@ -1603,6 +1610,11 @@ class MaxAiBrain(
                 cleanLower.contains("kya tum screen dekh") || cleanLower.contains("can you see this") ||
                 cleanLower.contains("can you see my screen") || cleanLower.contains("what is on my screen") ||
                 cleanLower.contains("look at my screen") || cleanLower.contains("look at this") ||
+                cleanLower.contains("see my screen") || cleanLower.contains("see this screen") ||
+                cleanLower.contains("screen dekho") || cleanLower.contains("meri screen dekho") ||
+                cleanLower.contains("screen dekh kar") || cleanLower.contains("screen dekh ke") ||
+                cleanLower.contains("screen help") || cleanLower.contains("screen par kya") || cleanLower.contains("screen pe kya") ||
+                cleanLower.contains("dekh kar batao") || cleanLower.contains("dekh ke batao") ||
                 cleanLower.contains("isme kya likha hai") || cleanLower.contains("ete ki lekha") || cleanLower.contains("এতে কি লেখা") ||
                 cleanLower == "read this" || cleanLower.contains("read my screen") || cleanLower.contains("screen padho") ||
                 cleanLower.contains("screen poro") || cleanLower.contains("স্ক্রিন পড়ো") || cleanLower.contains("read this page") ||
@@ -1612,7 +1624,7 @@ class MaxAiBrain(
                 cleanLower.contains("চিত্রটি ব্যাখ্যা করো") || cleanLower.contains("explain this question") || cleanLower.contains("explain screen") ||
                 cleanLower.contains("translate this page") || cleanLower.contains("find the error") ||
                 cleanLower.contains("help me solve this") || cleanLower.contains("screen vision") ||
-                cleanLower.contains("watch my screen") || cleanLower.contains("screen dekho") ||
+                cleanLower.contains("watch my screen") ||
                 cleanLower.contains("স্ক্রিন দেখো") || cleanLower.contains("स्क्रीन देखो")
 
         if (isScreenVisionTrigger) {
@@ -1643,13 +1655,14 @@ class MaxAiBrain(
         // 1. Scrolling
         if (cleanLower == "scroll down" || cleanLower.contains("scroll down") ||
             cleanLower.contains("niche scroll") || cleanLower.contains("নিচে স্ক্রোল") ||
-            cleanLower.contains("neeche scroll") || cleanLower.contains("scroll karo neeche")
+            cleanLower.contains("neeche scroll") || cleanLower.contains("scroll karo neeche") ||
+            cleanLower == "neeche karo" || cleanLower == "neeche jao" || cleanLower.contains("neeche scroll karo")
         ) {
             return BrainDecision.ScrollScreen(isDown = true, targetLang)
         }
         if (cleanLower == "scroll up" || cleanLower.contains("scroll up") ||
             cleanLower.contains("upar scroll") || cleanLower.contains("উপরে স্ক্রোল") ||
-            cleanLower.contains("scroll karo upar")
+            cleanLower.contains("scroll karo upar") || cleanLower == "upar karo" || cleanLower == "upar jao"
         ) {
             return BrainDecision.ScrollScreen(isDown = false, targetLang)
         }
@@ -1657,14 +1670,16 @@ class MaxAiBrain(
         // 2. Navigation Back
         if (cleanLower == "go back" || cleanLower == "back" || cleanLower == "back jao" ||
             cleanLower == "piche jao" || cleanLower == "পেছনে যাও" || cleanLower.contains("go back") ||
-            cleanLower.contains("peeche jao")
+            cleanLower.contains("peeche jao") || cleanLower == "back karo" || cleanLower == "wapas jao"
         ) {
             return BrainDecision.NavigateBack(targetLang)
         }
 
-        // 3. Close Screen
+        // 3. Close Screen / Home
         if (cleanLower.contains("close this screen") || cleanLower.contains("screen band karo") ||
-            cleanLower.contains("স্ক্রিন বন্ধ করো") || cleanLower.contains("ye screen band")
+            cleanLower.contains("স্ক্রিন বন্ধ করো") || cleanLower.contains("ye screen band") ||
+            cleanLower == "home" || cleanLower == "go to home" || cleanLower == "home screen" ||
+            cleanLower.contains("home par jao") || cleanLower.contains("home jao")
         ) {
             return BrainDecision.CloseScreen(targetLang)
         }
@@ -1707,14 +1722,33 @@ class MaxAiBrain(
             }
         }
 
-        // 7. Read on-screen text / notifications
+        // 7. General Click / Tap on any visible UI Element
+        val clickPatterns = listOf(
+            Regex("^(?:click\\s+(?:on\\s+)?|tap\\s+(?:on\\s+)?|press\\s+)(.+)$", RegexOption.IGNORE_CASE),
+            Regex("^(.+?)\\s+(?:par\\s+click(?:\\s+karo)?|pe\\s+click(?:\\s+karo)?|click\\s+karo|dabao|chuno)$", RegexOption.IGNORE_CASE)
+        )
+        for (pat in clickPatterns) {
+            val m = pat.find(cleanLower)
+            if (m != null) {
+                val target = m.groupValues[1].trim('\'', '"', ' ', '.', ',')
+                if (PaymentProtectionManager.isPaymentAction(target)) {
+                    val response = PaymentProtectionManager.getBlockedPaymentMessage(targetLang)
+                    return BrainDecision.SpeakResponse(response, targetLang)
+                }
+                if (target.isNotBlank() && target != "this" && target != "here" && !target.contains("option") && !target.contains("result")) {
+                    return BrainDecision.ClickScreenElement(target, targetLang)
+                }
+            }
+        }
+
+        // 8. Read on-screen text / notifications
         if (cleanLower.contains("read this notification") || cleanLower.contains("find my unread messages") ||
             cleanLower.contains("read notification") || cleanLower.contains("unread messages")
         ) {
             return BrainDecision.ReadScreenContent(targetLang)
         }
 
-        // 8. Switch to App: "switch to Chrome", "switch to WhatsApp"
+        // 9. Switch to App: "switch to Chrome", "switch to WhatsApp"
         if (cleanLower.startsWith("switch to ") || cleanLower.contains("par switch karo")) {
             val appTarget = cleanLower.replace(Regex("(?i)^(switch\\s+to|switch\\s+karo)\\s+"), "").replace(" par switch karo", "").trim()
             if (appTarget.isNotBlank()) {
@@ -1747,8 +1781,14 @@ class MaxAiBrain(
             return BrainDecision.FillFormAssistance(trimmed, targetLang)
         }
 
+        // Intercept any payment/money transfer compound task
+        if (PaymentProtectionManager.isPaymentRequest(cleanLower) || PaymentProtectionManager.isPaymentRequest(trimmed)) {
+            val response = PaymentProtectionManager.getBlockedPaymentMessage(targetLang)
+            return BrainDecision.SpeakResponse(response, targetLang)
+        }
+
         // Compound tasks: "open youtube search for ... and play ...", "open chrome search for ... and open first result"
-        val isCompound = (cleanLower.contains("youtube") && cleanLower.contains("search") && cleanLower.contains("play")) ||
+        val isCompound = (cleanLower.contains("youtube") && (cleanLower.contains("search") || cleanLower.contains("khojo") || cleanLower.contains("dhoondo")) && (cleanLower.contains("play") || cleanLower.contains("chalao") || cleanLower.contains("chala do") || cleanLower.contains("bajao") || cleanLower.contains("song") || cleanLower.contains("gaana"))) ||
                 (cleanLower.contains("chrome") && cleanLower.contains("search") && cleanLower.contains("result")) ||
                 (cleanLower.contains("bluetooth") && cleanLower.contains("turn on") && cleanLower.contains("settings"))
         if (isCompound) {

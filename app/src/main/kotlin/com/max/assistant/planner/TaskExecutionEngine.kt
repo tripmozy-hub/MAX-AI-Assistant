@@ -6,6 +6,7 @@ import com.max.assistant.accessibility.AndroidAccessibilityController
 import com.max.assistant.appcontrol.AppInteractionManager
 import com.max.assistant.launcher.AppLauncher
 import com.max.assistant.protection.GalleryProtectionManager
+import com.max.assistant.protection.PaymentProtectionManager
 import com.max.assistant.tts.VoiceLanguage
 import kotlinx.coroutines.delay
 
@@ -120,12 +121,20 @@ class TaskExecutionEngine(
                     Log.w(TAG, "Blocked gallery launch step in execution plan.")
                     return false
                 }
+                if (PaymentProtectionManager.isPaymentRequest(action.appQuery)) {
+                    Log.w(TAG, "Blocked payment launch step in execution plan: ${action.appQuery}")
+                    return false
+                }
                 val res = appLauncher.launchAppByVoice(action.appQuery)
                 delay(1200L)
                 res !is com.max.assistant.launcher.LaunchResult.NotFound &&
                         res !is com.max.assistant.launcher.LaunchResult.Blocked
             }
             is ExecutionStepType.ClickElement -> {
+                if (PaymentProtectionManager.isPaymentAction(action.targetTextOrId)) {
+                    Log.w(TAG, "Blocked payment element click in execution plan: ${action.targetTextOrId}")
+                    return false
+                }
                 accessibility.clickByText(action.targetTextOrId, action.isExact) ||
                         accessibility.clickByDescription(action.targetTextOrId, action.isExact) ||
                         accessibility.clickByViewId(action.targetTextOrId)
@@ -163,10 +172,16 @@ class TaskExecutionEngine(
             return null
         }
 
+        // Financial Payment check
+        if (PaymentProtectionManager.isPaymentRequest(query)) {
+            Log.w(TAG, "Rejected execution plan for payment request: $query")
+            return null
+        }
+
         // 1. YouTube multi-step task: "open youtube search for ... and play"
-        if (lower.contains("youtube") && (lower.contains("search") || lower.contains("play") || lower.contains("chalao") || lower.contains("chala do"))) {
-            val searchTerm = query.replace(Regex("(?i)^(.*?(search for|play|find|kholo))\\s+"), "")
-                .replace(Regex("(?i)(and play.*|video.*|on youtube.*|chalao.*|chala do.*)"), "")
+        if (lower.contains("youtube") && (lower.contains("search") || lower.contains("play") || lower.contains("chalao") || lower.contains("chala do") || lower.contains("bajao") || lower.contains("song") || lower.contains("gaana"))) {
+            val searchTerm = query.replace(Regex("(?i)^(.*?(search for|play|find|kholo|dhoondo|khojo))\\s+"), "")
+                .replace(Regex("(?i)(and play.*|video.*|on youtube.*|chalao.*|chala do.*|bajao.*)"), "")
                 .trim()
             val cleanSearch = if (searchTerm.isNotBlank()) searchTerm else "Bengali travel documentary"
 
