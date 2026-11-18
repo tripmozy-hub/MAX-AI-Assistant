@@ -9,6 +9,16 @@
   <img src="https://img.shields.io/badge/Tests-Passing%20(Unit%20%26%20Security)-00E676?style=for-the-badge" alt="Tests Passing" />
 </p>
 
+<p align="center">
+  <a href="https://files.catbox.moe/dyr6ad.apk">
+    <img src="https://img.shields.io/badge/📲%20Download%20MAX%20APK%20(v2.0.0)-Direct%201--Click-00E5FF?style=for-the-badge&logo=android&logoColor=black" alt="Download APK" height="40" />
+  </a>
+</p>
+
+> 📲 **Direct Download Link for Any Phone:**  
+> **[https://files.catbox.moe/dyr6ad.apk](https://files.catbox.moe/dyr6ad.apk)**  
+> *(18.7 MB • Target Android 15 / Minimum Android 8.0 • Direct 1-Click Install)*
+
 ---
 
 ## ⚡ Overview
