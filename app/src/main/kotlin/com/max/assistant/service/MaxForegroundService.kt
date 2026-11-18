@@ -31,9 +31,11 @@ import com.max.assistant.updater.AutoUpdateManager
 import com.max.assistant.updater.UpdateStatus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -268,6 +270,7 @@ class MaxForegroundService : Service() {
             }
         }
 
+        startAutoUpdateLoop()
         Log.i(TAG, "MaxForegroundService created.")
     }
 
@@ -1498,21 +1501,70 @@ class MaxForegroundService : Service() {
         addLog(if (mute) "Listening beep muted (Silent mode active)." else "Listening beep unmuted.")
     }
 
+    private var updateJob: Job? = null
+
+    private fun startAutoUpdateLoop() {
+        updateJob?.cancel()
+        updateJob = serviceScope.launch {
+            // Wait 20 seconds after launch before first update check
+            delay(20_000L)
+            while (isActive) {
+                try {
+                    addLog("Cloud Auto-Update: Checking latest release...")
+                    val checkResult = updateManager.checkVersion()
+                    if (checkResult is UpdateStatus.UpdateAvailable) {
+                        addLog("Cloud Auto-Update: Version ${checkResult.latestVersion} found. Downloading in background...")
+                        speakWithCoordination("सर, MAX का नया अपडेट ${checkResult.latestVersion} आ गया है। बैकग्राउंड में डाउनलोड किया जा रहा है।", VoiceLanguage.HINDI)
+                        val status = updateManager.downloadAndInstallUpdate(checkResult.downloadUrl)
+                        if (status is UpdateStatus.ReadyToInstall) {
+                            speakWithCoordination("सर, नया अपडेट तैयार है। स्क्रीन पर इंस्टॉलेशन कन्फर्म करें।", VoiceLanguage.HINDI)
+                            addLog("Cloud Auto-Update: Downloaded. PackageInstaller prompt triggered.")
+                        }
+                    } else {
+                        addLog("Cloud Auto-Update: MAX is on the latest release.")
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Auto-update loop check failed: ${e.message}")
+                }
+                // Check every 6 hours
+                delay(6 * 3600 * 1000L)
+            }
+        }
+    }
+
     private fun checkForUpdates() {
         speakWithCoordination("अपडेट जांचा जा रहा है, सर। कृपया प्रतीक्षा करें।", VoiceLanguage.HINDI)
-        addLog("Checking updates from Wi-Fi server...")
+        addLog("Checking updates from GitHub Releases & CDN...")
         serviceScope.launch {
-            val status = updateManager.downloadAndInstallUpdate()
-            when (status) {
-                is UpdateStatus.ReadyToInstall -> {
-                    speakWithCoordination("नया अपडेट डाउनलोड हो गया है, सर। इंस्टॉलेशन शुरू किया जा रहा है।", VoiceLanguage.HINDI)
-                    addLog("Update ready: PackageInstaller triggered.")
+            when (val checkResult = updateManager.checkVersion()) {
+                is UpdateStatus.UpdateAvailable -> {
+                    speakWithCoordination("सर, नया अपडेट ${checkResult.latestVersion} उपलब्ध है। डाउनलोड किया जा रहा है।", VoiceLanguage.HINDI)
+                    addLog("Update ${checkResult.latestVersion} found. Downloading...")
+                    val status = updateManager.downloadAndInstallUpdate(checkResult.downloadUrl)
+                    when (status) {
+                        is UpdateStatus.ReadyToInstall -> {
+                            speakWithCoordination("नया अपडेट डाउनलोड हो गया है, सर। इंस्टॉलेशन शुरू किया जा रहा है।", VoiceLanguage.HINDI)
+                            addLog("Update ready: PackageInstaller triggered.")
+                        }
+                        is UpdateStatus.Error -> {
+                            speakWithCoordination("सर, डाउनलोड में समस्या आई: ${status.message}", VoiceLanguage.HINDI)
+                            addLog("Update download failed: ${status.message}")
+                        }
+                        else -> {}
+                    }
+                }
+                is UpdateStatus.UpToDate -> {
+                    speakWithCoordination("सर, MAX पहले से ही नवीनतम संस्करण पर अपडेटेड है।", VoiceLanguage.HINDI)
+                    addLog("MAX is already on the latest version.")
                 }
                 is UpdateStatus.Error -> {
-                    speakWithCoordination("सर, अभी कोई नया अपडेट नहीं मिला या नेटवर्क समस्या है।", VoiceLanguage.HINDI)
-                    addLog("Update check notice: ${status.message}")
+                    speakWithCoordination("सर, अपडेट सर्वर से संपर्क नहीं हो पाया।", VoiceLanguage.HINDI)
+                    addLog("Update check notice: ${checkResult.message}")
                 }
-                else -> {}
+                else -> {
+                    speakWithCoordination("सर, MAX पहले से ही नवीनतम संस्करण पर अपडेटेड है।", VoiceLanguage.HINDI)
+                    addLog("MAX is up-to-date.")
+                }
             }
         }
     }

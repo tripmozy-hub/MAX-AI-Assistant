@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -16,6 +17,8 @@ import java.net.URL
 sealed class UpdateStatus {
     object Idle : UpdateStatus()
     object Checking : UpdateStatus()
+    object UpToDate : UpdateStatus()
+    data class UpdateAvailable(val latestVersion: String, val downloadUrl: String) : UpdateStatus()
     data class Downloading(val progressPercent: Int) : UpdateStatus()
     data class ReadyToInstall(val apkFile: File) : UpdateStatus()
     data class Error(val message: String) : UpdateStatus()
@@ -25,37 +28,117 @@ class AutoUpdateManager(private val context: Context) {
 
     companion object {
         private const val TAG = "AutoUpdateManager"
-        // Local Wi-Fi server serving latest build
-        const val UPDATE_SERVER_URL = "http://192.168.1.4:8080/MAX.apk"
+        const val GITHUB_RELEASE_API = "https://api.github.com/repos/tripmozy-hub/MAX-AI-Assistant/releases/latest"
+        const val PRIMARY_DOWNLOAD_URL = "https://github.com/tripmozy-hub/MAX-AI-Assistant/releases/latest/download/MAX.apk"
+        const val FALLBACK_DOWNLOAD_URL = "https://files.catbox.moe/jkoe2j.apk"
     }
 
     /**
-     * Checks Wi-Fi server and downloads the latest MAX APK update.
+     * Checks if a new release is available on GitHub.
+     */
+    suspend fun checkVersion(): UpdateStatus = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(GITHUB_RELEASE_API)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 8000
+                setRequestProperty("User-Agent", "MAX-Assistant-Android")
+                setRequestProperty("Accept", "application/vnd.github.v3+json")
+            }
+
+            if (conn.responseCode == HttpURLConnection.HTTP_OK) {
+                val jsonStr = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(jsonStr)
+                val tagName = json.optString("tag_name", "").trim()
+                val remoteVer = tagName.removePrefix("v").trim()
+                
+                val currentVersion = try {
+                    val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                    pInfo.versionName ?: "2.0.0"
+                } catch (e: Exception) {
+                    "2.0.0"
+                }
+
+                var downloadUrl = PRIMARY_DOWNLOAD_URL
+                val assets = json.optJSONArray("assets")
+                if (assets != null && assets.length() > 0) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
+                            downloadUrl = asset.optString("browser_download_url", PRIMARY_DOWNLOAD_URL)
+                            break
+                        }
+                    }
+                }
+
+                if (isNewerVersion(remoteVer, currentVersion)) {
+                    Log.i(TAG, "New update available: $remoteVer (Current: $currentVersion)")
+                    return@withContext UpdateStatus.UpdateAvailable(remoteVer, downloadUrl)
+                } else {
+                    Log.i(TAG, "MAX is up-to-date. Version: $currentVersion")
+                    return@withContext UpdateStatus.UpToDate
+                }
+            }
+            UpdateStatus.UpToDate
+        } catch (e: Exception) {
+            Log.w(TAG, "Check version failed, checking fallback: ${e.message}")
+            UpdateStatus.UpToDate
+        }
+    }
+
+    /**
+     * Downloads and installs update from GitHub or mirror.
      */
     suspend fun downloadAndInstallUpdate(
-        updateUrl: String = UPDATE_SERVER_URL,
+        customUrl: String? = null,
         onProgress: ((Int) -> Unit)? = null
     ): UpdateStatus = withContext(Dispatchers.IO) {
+        val targetUrl = customUrl ?: PRIMARY_DOWNLOAD_URL
+        var result = tryDownload(targetUrl, onProgress)
+        if (result is UpdateStatus.Error && targetUrl == PRIMARY_DOWNLOAD_URL) {
+            Log.w(TAG, "Primary download failed, trying CDN fallback...")
+            result = tryDownload(FALLBACK_DOWNLOAD_URL, onProgress)
+        }
+        result
+    }
+
+    private fun tryDownload(targetUrl: String, onProgress: ((Int) -> Unit)?): UpdateStatus {
         try {
-            Log.i(TAG, "Checking update from $updateUrl")
-            val url = URL(updateUrl)
-            val connection = url.openConnection() as HttpURLConnection
-            connection.connectTimeout = 8000
-            connection.readTimeout = 15000
-            connection.requestMethod = "GET"
+            Log.i(TAG, "Downloading update from $targetUrl")
+            var url = URL(targetUrl)
+            var connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 12000
+            connection.readTimeout = 25000
+            connection.instanceFollowRedirects = true
+            connection.setRequestProperty("User-Agent", "MAX-Assistant-Android")
             connection.connect()
 
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                return@withContext UpdateStatus.Error("अपडेट सर्वर से संपर्क नहीं हो पाया (Code: ${connection.responseCode})")
+            // Handle HTTP 301 / 302 / 307 redirects
+            val code = connection.responseCode
+            if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, 307, 308)) {
+                val newUrl = connection.getHeaderField("Location")
+                if (!newUrl.isNullOrEmpty()) {
+                    url = URL(newUrl)
+                    connection = url.openConnection() as HttpURLConnection
+                    connection.connectTimeout = 12000
+                    connection.readTimeout = 25000
+                    connection.setRequestProperty("User-Agent", "MAX-Assistant-Android")
+                    connection.connect()
+                }
+            }
+
+            if (connection.responseCode !in 200..299) {
+                return UpdateStatus.Error("अपडेट सर्वर से संपर्क नहीं हो पाया (Code: ${connection.responseCode})")
             }
 
             val fileLength = connection.contentLength
             val cacheDir = context.externalCacheDir ?: context.cacheDir
             val updateFile = File(cacheDir, "MAX_Update.apk")
+            if (updateFile.exists()) updateFile.delete()
 
             connection.inputStream.use { input ->
                 FileOutputStream(updateFile).use { output ->
-                    val data = ByteArray(8192)
+                    val data = ByteArray(16384)
                     var total: Long = 0
                     var count: Int
                     while (input.read(data).also { count = it } != -1) {
@@ -69,12 +152,16 @@ class AutoUpdateManager(private val context: Context) {
                 }
             }
 
+            if (updateFile.length() < 1_000_000L) {
+                return UpdateStatus.Error("अमान्य अपडेट फ़ाइल आकार (${updateFile.length()} bytes)")
+            }
+
             Log.i(TAG, "Update downloaded successfully: ${updateFile.absolutePath} (${updateFile.length()} bytes)")
             triggerInstall(updateFile)
-            UpdateStatus.ReadyToInstall(updateFile)
+            return UpdateStatus.ReadyToInstall(updateFile)
         } catch (e: Exception) {
             Log.e(TAG, "Error updating MAX: ${e.message}")
-            UpdateStatus.Error("अपडेट डाउनलोड करने में त्रुटि, सर: ${e.message}")
+            return UpdateStatus.Error("अपडेट डाउनलोड करने में त्रुटि, सर: ${e.message}")
         }
     }
 
@@ -98,5 +185,22 @@ class AutoUpdateManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch package installer: ${e.message}")
         }
+    }
+
+    private fun isNewerVersion(remoteVer: String, currentVer: String): Boolean {
+        try {
+            val rParts = remoteVer.split(".").map { it.toIntOrNull() ?: 0 }
+            val cParts = currentVer.split(".").map { it.toIntOrNull() ?: 0 }
+            val maxLen = maxOf(rParts.size, cParts.size)
+            for (i in 0 until maxLen) {
+                val r = rParts.getOrElse(i) { 0 }
+                val c = cParts.getOrElse(i) { 0 }
+                if (r > c) return true
+                if (r < c) return false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Version compare error: ${e.message}")
+        }
+        return false
     }
 }
