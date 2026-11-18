@@ -10,14 +10,15 @@
 </p>
 
 <p align="center">
-  <a href="https://files.catbox.moe/dyr6ad.apk">
+  <a href="https://github.com/tripmozy-hub/MAX-AI-Assistant/releases/latest/download/MAX.apk">
     <img src="https://img.shields.io/badge/📲%20Download%20MAX%20APK%20(v2.0.0)-Direct%201--Click-00E5FF?style=for-the-badge&logo=android&logoColor=black" alt="Download APK" height="40" />
   </a>
 </p>
 
-> 📲 **Direct Download Link for Any Phone:**  
-> **[https://files.catbox.moe/dyr6ad.apk](https://files.catbox.moe/dyr6ad.apk)**  
-> *(18.7 MB • Target Android 15 / Minimum Android 8.0 • Direct 1-Click Install)*
+> 📲 **Direct Download Links (Works on Any Phone):**  
+> • **Primary (GitHub Release):** **[https://github.com/tripmozy-hub/MAX-AI-Assistant/releases/latest/download/MAX.apk](https://github.com/tripmozy-hub/MAX-AI-Assistant/releases/latest/download/MAX.apk)**  
+> • **Fast CDN Mirror:** **[https://files.catbox.moe/dyr6ad.apk](https://files.catbox.moe/dyr6ad.apk)**  
+> *(18.7 MB • Android 8.0+ / Android 15 Ready • Direct 1-Click Install • Zero Sign-In Required)*
 
 ---
 
