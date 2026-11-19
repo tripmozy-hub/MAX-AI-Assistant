@@ -501,14 +501,15 @@ class MaxForegroundService : Service() {
 
     fun speakWithCoordination(
         text: String,
-        targetLanguage: VoiceLanguage? = VoiceLanguage.HINDI,
+        targetLanguage: VoiceLanguage? = null,
         listenForFollowUp: Boolean = false,
         onDone: (() -> Unit)? = null
     ) {
+        val langToUse = targetLanguage ?: voiceEngine.settings.value.outputLanguage
         speechManager.notifyAssistantSpeakingStarted(text)
         voiceEngine.speak(
             text = text,
-            targetLanguage = targetLanguage ?: VoiceLanguage.HINDI,
+            targetLanguage = langToUse,
             onSpeechStarted = {
                 speechManager.notifyAssistantSpeakingStarted(text)
             },
@@ -1796,8 +1797,15 @@ class MaxForegroundService : Service() {
     }
 
     fun testVoice(sampleText: String? = null) {
-        val text = sampleText ?: "नमस्ते सर! मैक्स आवाज प्रणाली पूरी तरह से तैयार है।"
-        speakWithCoordination(text, VoiceLanguage.HINDI)
+        val currentLang = voiceEngine.settings.value.outputLanguage
+        val defaultSample = when (currentLang) {
+            VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> "MAX JARVIS system online and standing by at your service, Sir."
+            VoiceLanguage.BENGALI -> "ম্যাক্স অনলাইন আছে, স্যার। আমি আপনার সেবায় প্রস্তুত।"
+            VoiceLanguage.HINDI -> "नमस्ते सर! मैक्स आवाज प्रणाली पूरी तरह से तैयार है।"
+            VoiceLanguage.HINGLISH -> "Hello Sir! MAX system taiyaar hai, what can I do for you?"
+        }
+        val text = sampleText ?: defaultSample
+        speakWithCoordination(text, currentLang)
     }
 
     fun stopSpeaking() {
@@ -1814,28 +1822,50 @@ class MaxForegroundService : Service() {
         screenVisionManager.cleanupResources()
         voiceEngine.stop()
         speechManager.stopMax()
-        val stopMsg = "मैक्स रोक दिया गया है, सर।"
-        addLog("MAX stopped, Sir.")
-        updateNotification("MAX is Stopped")
-        speakWithCoordination(stopMsg, VoiceLanguage.HINDI, listenForFollowUp = false) {
+        val curLang = voiceEngine.settings.value.outputLanguage
+        val stopMsg = when (curLang) {
+            VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> "MAX systems entering standby mode, Sir."
+            VoiceLanguage.BENGALI -> "ম্যাক্স স্থগিত করা হয়েছে, স্যার।"
+            else -> "मैक्स रोक दिया गया है, सर।"
+        }
+        addLog("MAX standby initiated, Sir.")
+        updateNotification("MAX is Standby")
+        speakWithCoordination(stopMsg, curLang, listenForFollowUp = false) {
             speechManager.stopMax()
         }
     }
 
     fun requestPinDialog() {
         _showPinDialog.value = true
-        speakWithCoordination("कृपया सुरक्षा पिन दर्ज करें, सर।", VoiceLanguage.HINDI)
+        val curLang = voiceEngine.settings.value.outputLanguage
+        val pinMsg = when (curLang) {
+            VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> "Please enter your security PIN, Sir."
+            VoiceLanguage.BENGALI -> "দয়া করে আপনার নিরাপত্তা পিন লিখুন, স্যার।"
+            else -> "कृपया सुरक्षा पिन दर्ज करें, सर।"
+        }
+        speakWithCoordination(pinMsg, curLang)
     }
 
     fun verifyPin(pin: String): Boolean {
         val success = speechManager.verifyPinAndUnlock(pin)
+        val curLang = voiceEngine.settings.value.outputLanguage
         if (success) {
             _showPinDialog.value = false
-            speakWithCoordination("अनुमति पुष्ट हुई। स्वागत है सर।", VoiceLanguage.HINDI)
+            val authMsg = when (curLang) {
+                VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> "Authorization confirmed. Welcome back, Sir."
+                VoiceLanguage.BENGALI -> "অনুমতি নিশ্চিত করা হয়েছে। স্বাগতম, স্যার।"
+                else -> "अनुमति पुष्ट हुई। स्वागत है सर।"
+            }
+            speakWithCoordination(authMsg, curLang)
             addLog("Security PIN verified. MAX restarted for Sir.")
             updateNotification("MAX Voice Assistant Active")
         } else {
-            speakWithCoordination("गलत पिन, सर।", VoiceLanguage.HINDI)
+            val deniedMsg = when (curLang) {
+                VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> "Access denied. Incorrect security PIN, Sir."
+                VoiceLanguage.BENGALI -> "ভুল পিন, স্যার।"
+                else -> "गलत पिन, सर।"
+            }
+            speakWithCoordination(deniedMsg, curLang)
             addLog("Incorrect PIN attempt.")
         }
         return success

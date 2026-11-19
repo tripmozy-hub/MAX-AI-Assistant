@@ -262,8 +262,8 @@ fun FuturisticDashboard(
                         VoiceLanguage.HINGLISH -> "HING"
                         VoiceLanguage.HINDI -> "HI"
                         VoiceLanguage.BENGALI -> "BN"
-                        VoiceLanguage.ENGLISH -> "EN"
-                        else -> "AUTO"
+                        VoiceLanguage.ENGLISH -> "JARVIS"
+                        else -> "JARVIS"
                     }
                     Box(
                         modifier = Modifier

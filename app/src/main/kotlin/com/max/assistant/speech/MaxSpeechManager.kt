@@ -1104,14 +1104,14 @@ class MaxSpeechManager(
                     putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "hi-IN", "bn-IN"))
                 }
                 VoiceLanguage.ENGLISH -> {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-US", "hi-IN"))
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-GB")
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-GB", "en-US", "en-IN", "hi-IN"))
                 }
                 VoiceLanguage.AUTO -> {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US", "bn-IN"))
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-GB")
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-GB", "hi-IN", "en-IN", "en-US", "bn-IN"))
                 }
             }
         }

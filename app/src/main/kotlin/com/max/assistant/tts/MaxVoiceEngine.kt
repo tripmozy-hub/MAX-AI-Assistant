@@ -23,9 +23,10 @@ class MaxVoiceEngine(
 
     companion object {
         private const val TAG = "MaxVoiceEngine"
-        // JARVIS Style: deep, calm, confident British cadence and clear Indian articulation
-        const val DEFAULT_JARVIS_PITCH = 0.88f
-        const val DEFAULT_JARVIS_SPEED = 0.98f
+        // JARVIS Style: deep, calm, confident British cadence (Paul Bettany profile)
+        const val DEFAULT_JARVIS_PITCH = 0.83f
+        const val DEFAULT_JARVIS_SPEED = 0.94f
+        private const val GOOGLE_TTS_PACKAGE = "com.google.android.tts"
     }
 
     private var tts: TextToSpeech? = null
@@ -56,7 +57,21 @@ class MaxVoiceEngine(
     private val pendingCallbacks = mutableMapOf<String, Pair<(() -> Unit)?, (() -> Unit)?>>()
 
     init {
-        tts = TextToSpeech(context) { status ->
+        initTtsEngine()
+    }
+
+    private fun initTtsEngine() {
+        val hasGoogleTts = try {
+            context.packageManager.getPackageInfo(GOOGLE_TTS_PACKAGE, 0)
+            true
+        } catch (e: Exception) {
+            false
+        }
+
+        val engineToUse = if (hasGoogleTts) GOOGLE_TTS_PACKAGE else null
+        Log.i(TAG, "Initializing TextToSpeech with preferred engine: $engineToUse")
+
+        tts = TextToSpeech(context, { status ->
             if (status == TextToSpeech.SUCCESS) {
                 configureAudioAttributes()
                 applyVoiceSettings(_settings.value)
@@ -64,12 +79,29 @@ class MaxVoiceEngine(
                 Log.i(TAG, "MAX JARVIS Multilingual Voice Engine initialized successfully.")
                 onInitCompleted?.invoke()
             } else {
-                Log.e(TAG, "Failed to initialize TextToSpeech: status=$status")
-                _settings.value = _settings.value.copy(
-                    engineStatusMessage = "TTS Engine Init Failed (Status $status)"
-                )
+                Log.w(TAG, "Failed to initialize TextToSpeech with engine $engineToUse (status=$status). Trying default engine.")
+                if (engineToUse != null) {
+                    tts = TextToSpeech(context) { fallbackStatus ->
+                        if (fallbackStatus == TextToSpeech.SUCCESS) {
+                            configureAudioAttributes()
+                            applyVoiceSettings(_settings.value)
+                            isReady = true
+                            Log.i(TAG, "MAX JARVIS Voice Engine initialized with system default.")
+                            onInitCompleted?.invoke()
+                        } else {
+                            Log.e(TAG, "Fallback TTS initialization failed: status=$fallbackStatus")
+                            _settings.value = _settings.value.copy(
+                                engineStatusMessage = "TTS Engine Init Failed (Status $fallbackStatus)"
+                            )
+                        }
+                    }
+                } else {
+                    _settings.value = _settings.value.copy(
+                        engineStatusMessage = "TTS Engine Init Failed (Status $status)"
+                    )
+                }
             }
-        }
+        }, engineToUse)
     }
 
     private fun configureAudioAttributes() {
@@ -131,7 +163,7 @@ class MaxVoiceEngine(
             VoiceLanguage.HINDI -> Locale("hi", "IN")
             VoiceLanguage.BENGALI -> Locale("bn", "IN")
             VoiceLanguage.ENGLISH -> Locale.UK
-            VoiceLanguage.AUTO -> Locale("hi", "IN") // Default to hi-IN for Hinglish auto mode
+            VoiceLanguage.AUTO -> Locale.UK // Default to British English for JARVIS persona
         }
 
         val selectedVoiceName = selectBestVoiceForLocale(targetLocale)
@@ -146,7 +178,7 @@ class MaxVoiceEngine(
         val availability = engine.isLanguageAvailable(locale)
 
         if (availability == TextToSpeech.LANG_MISSING_DATA || availability == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.w(TAG, "Locale ${locale.displayName} unavailable (code $availability), falling back to default")
+            Log.w(TAG, "Locale ${locale.displayName} unavailable (code $availability), falling back to UK English")
             engine.language = Locale.UK
             return "Fallback Default"
         }
@@ -156,23 +188,55 @@ class MaxVoiceEngine(
         try {
             val voices = engine.voices
             if (!voices.isNullOrEmpty()) {
-                val matchingVoices = voices.filter { it.locale.language == locale.language }
-                // Rank voices to prioritize deep, natural male models inspired by JARVIS
-                val bestCandidate = matchingVoices.maxByOrNull { voice ->
-                    val name = voice.name.lowercase(Locale.ROOT)
-                    var score = 0
-                    if (name.contains("neural") || name.contains("natural")) score += 50
-                    if (name.contains("network")) score += 30
-                    if ((name.contains("male") || name.contains("rjs") || name.contains("cfl") || name.contains("iol") || name.contains("sfg")) && !name.contains("female")) score += 35
-                    if (voice.quality == Voice.QUALITY_VERY_HIGH || voice.quality == Voice.QUALITY_HIGH) score += 20
-                    if (voice.latency == Voice.LATENCY_VERY_LOW || voice.latency == Voice.LATENCY_LOW) score += 10
-                    score
-                }
+                val matchingVoices = voices.filter { it.locale.language.equals(locale.language, ignoreCase = true) }
+                if (matchingVoices.isNotEmpty()) {
+                    val isUkTarget = locale.country.equals("GB", ignoreCase = true) || locale.language.equals("en", ignoreCase = true)
 
-                if (bestCandidate != null) {
-                    engine.voice = bestCandidate
-                    Log.i(TAG, "Assigned Natural JARVIS Voice: ${bestCandidate.name} for ${locale.displayName}")
-                    return bestCandidate.name
+                    // Rank voices to prioritize deep, natural British male models inspired by JARVIS
+                    val bestCandidate = matchingVoices.maxByOrNull { voice ->
+                        val name = voice.name.lowercase(Locale.ROOT)
+                        val country = voice.locale.country
+                        var score = 0
+
+                        if (isUkTarget) {
+                            // Heavy preference for UK English voices
+                            if (country.equals("GB", ignoreCase = true) || name.contains("en-gb") || name.contains("en_gb")) {
+                                score += 200
+                            } else if (country.equals("US", ignoreCase = true) || name.contains("en-us") || name.contains("en_us")) {
+                                score += 20 // Secondary fallback
+                            }
+
+                            // Iconic Google & Samsung British male JARVIS voice profiles
+                            if (name.contains("rjs")) score += 350      // Google en-gb-x-rjs: The premier JARVIS voice
+                            if (name.contains("cfl")) score += 200      // Google en-gb-x-cfl: Refined British male
+                            if (name.contains("fis")) score += 180      // Google en-gb-x-fis: Deep British male
+                            if (name.contains("gbr")) score += 150      // Google en-gb-x-gbr
+                            if (name.contains("male") && !name.contains("female")) score += 120
+                        } else {
+                            if (country.equals(locale.country, ignoreCase = true)) score += 150
+                            if (name.contains("male") && !name.contains("female")) score += 100
+                        }
+
+                        // Disqualify / heavily penalize female voices for the JARVIS male persona
+                        if (name.contains("female") || name.contains("woman") || name.contains("girl") || name.contains("f00") || name.contains("zita")) {
+                            score -= 1000
+                        }
+
+                        // Neural / Natural network synthesis quality
+                        if (name.contains("neural") || name.contains("natural")) score += 80
+                        if (name.contains("network")) score += 40
+                        if (voice.quality == Voice.QUALITY_VERY_HIGH || voice.quality == Voice.QUALITY_HIGH) score += 30
+                        if (!voice.isNetworkConnectionRequired) score += 15 // Available offline bonus
+                        if (voice.latency == Voice.LATENCY_VERY_LOW || voice.latency == Voice.LATENCY_LOW) score += 10
+
+                        score
+                    }
+
+                    if (bestCandidate != null) {
+                        engine.voice = bestCandidate
+                        Log.i(TAG, "Assigned Natural JARVIS Voice: ${bestCandidate.name} for ${locale.displayName}")
+                        return bestCandidate.name
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -202,17 +266,19 @@ class MaxVoiceEngine(
             return
         }
 
+        val detectedLang = LanguageDetector.detectLanguage(text)
         val langToUse = when {
             targetLanguage != null && targetLanguage != VoiceLanguage.AUTO -> targetLanguage
+            detectedLang == VoiceLanguage.HINDI || detectedLang == VoiceLanguage.BENGALI -> detectedLang
             _settings.value.outputLanguage != VoiceLanguage.AUTO -> _settings.value.outputLanguage
-            else -> LanguageDetector.detectLanguage(text)
+            else -> VoiceLanguage.ENGLISH
         }
 
         val localeToSet = when (langToUse) {
             VoiceLanguage.HINGLISH -> Locale("hi", "IN") // hi-IN TTS engine pronounces English words inside Hindi sentences naturally
             VoiceLanguage.HINDI -> Locale("hi", "IN")
             VoiceLanguage.BENGALI -> Locale("bn", "IN")
-            VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> Locale("hi", "IN") // Default to hi-IN for Hinglish
+            VoiceLanguage.ENGLISH, VoiceLanguage.AUTO -> Locale.UK // Authentic British JARVIS
         }
 
         // Verify language availability

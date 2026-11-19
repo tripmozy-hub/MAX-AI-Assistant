@@ -523,7 +523,7 @@ private fun LanguagePillSelector(
                     text = when (lang) {
                         VoiceLanguage.AUTO -> "AUTO"
                         VoiceLanguage.HINGLISH -> "HING"
-                        VoiceLanguage.ENGLISH -> "ENG"
+                        VoiceLanguage.ENGLISH -> "JARVIS"
                         VoiceLanguage.HINDI -> "हिंदी"
                         VoiceLanguage.BENGALI -> "বাংলা"
                     },
