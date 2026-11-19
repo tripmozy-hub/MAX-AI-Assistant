@@ -257,8 +257,17 @@ class MaxSpeechManager(
             }
 
             try {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                    setRecognitionListener(createRecognitionListener())
+                // On Android 12+ (API 31+), prioritize on-device speech recognizer so that background music playback
+                // (e.g. Spotify, YouTube Music, Samsung Music) is never interrupted or paused by Google App audio focus steals.
+                speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                    Log.i(TAG, "Initializing On-Device SpeechRecognizer for seamless music & speech coexistence.")
+                    SpeechRecognizer.createOnDeviceSpeechRecognizer(context).apply {
+                        setRecognitionListener(createRecognitionListener())
+                    }
+                } else {
+                    SpeechRecognizer.createSpeechRecognizer(context).apply {
+                        setRecognitionListener(createRecognitionListener())
+                    }
                 }
                 Log.i(TAG, "Created Multi-lingual SpeechRecognizer for MAX.")
                 busyErrorCount = 0
@@ -494,12 +503,17 @@ class MaxSpeechManager(
             }
 
             if (isListeningLoopActive && !isStopped && !isMuted) {
-                // Ultra-low latency re-listen loop: 50ms on speech timeout/no-match so continuous listening never stutters
-                val delay = when (error) {
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 200L
-                    SpeechRecognizer.ERROR_CLIENT -> 200L
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 50L
-                    else -> 200L
+                // If background music is playing, do not rapid-fire restart in 50ms to prevent audio focus thrashing
+                val isMusicPlaying = audioManager?.isMusicActive == true
+                val delay = if (isMusicPlaying) {
+                    600L
+                } else {
+                    when (error) {
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 200L
+                        SpeechRecognizer.ERROR_CLIENT -> 200L
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 50L
+                        else -> 200L
+                    }
                 }
                 handler.postDelayed({
                     if (isListeningLoopActive && !isPausedForSpeaking && !isMuted && !isStopped) {
@@ -1026,8 +1040,12 @@ class MaxSpeechManager(
 
     fun silencePromptStreams() {
         if (!muteListeningBeep) return
+        val am = audioManager ?: (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager) ?: return
+        // Never touch or mute stream volumes if music is actively playing in the background
+        if (am.isMusicActive) {
+            return
+        }
         try {
-            val am = audioManager ?: (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager) ?: return
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 am.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
                 am.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
@@ -1080,15 +1098,24 @@ class MaxSpeechManager(
             audioManager?.setParameters("beamforming=enable;noise_suppression=on;far_field=on;agc=on;voice_recognition=on")
         } catch (_: Exception) {}
 
+        val isMusicPlaying = audioManager?.isMusicActive == true
+
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 15)
             putExtra(RecognizerIntent.EXTRA_CONFIDENCE_SCORES, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, isMusicPlaying)
             putExtra("android.speech.extra.ENABLE_BIASING_DEVICE_CONTEXT", true)
             putExtra("android.speech.extra.AUDIO_SOURCE", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
+
+            // Music coexistence: do not request exclusive audio focus when background music is active
+            if (isMusicPlaying) {
+                putExtra("android.speech.extra.REQUEST_AUDIO_FOCUS", false)
+                putExtra("REQUEST_AUDIO_FOCUS", false)
+                putExtra("android.speech.extra.AUDIO_FOCUS_GAIN_TYPE", AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+            }
 
             // Absolute silence extras: suppress vendor & Google prompt tones
             putExtra("android.speech.extra.BEEP", false)
@@ -1099,8 +1126,9 @@ class MaxSpeechManager(
             putExtra("sound", false)
 
             // Far-Field conversational endpointing: enables distant voice capture (3-5m) without clipping
-            val completeSilence = if (isAwaitingCommand) 2400L else 2800L
-            val possiblyCompleteSilence = if (isAwaitingCommand) 1600L else 2000L
+            // If music is actively playing, extend timeout window so recognizer doesn't cycle and pause playback
+            val completeSilence = if (isMusicPlaying) 8000L else if (isAwaitingCommand) 2400L else 2800L
+            val possiblyCompleteSilence = if (isMusicPlaying) 5000L else if (isAwaitingCommand) 1600L else 2000L
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, completeSilence)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyCompleteSilence)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 100L)

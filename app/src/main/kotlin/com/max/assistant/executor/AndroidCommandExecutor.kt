@@ -59,7 +59,8 @@ class AndroidCommandExecutor(
     private val appLauncher: AppLauncher = AppLauncher(context),
     private val phoneManager: PhoneCommunicationManager = PhoneCommunicationManager(context),
     private val systemStatus: SystemStatusManager = SystemStatusManager(context),
-    val notesAndTasks: NotesAndTasksManager = NotesAndTasksManager(context)
+    val notesAndTasks: NotesAndTasksManager = NotesAndTasksManager(context),
+    private val accessibilityController: com.max.assistant.accessibility.AndroidAccessibilityController = com.max.assistant.accessibility.AndroidAccessibilityController(context)
 ) {
 
     companion object {
@@ -109,6 +110,157 @@ class AndroidCommandExecutor(
                 CommandExecutionResult.Failed(res.message)
             }
         }
+    }
+
+    // 1b. Close Application (Specific app or Active window to Home)
+    fun closeApplication(query: String, targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        val trimmed = query.trim().lowercase()
+        val isGenericClose = trimmed.isBlank() || trimmed == "this app" || trimmed == "current app" ||
+                trimmed == "ye app" || trimmed == "app" || trimmed == "application" || trimmed == "close" ||
+                trimmed == "band karo" || trimmed == "yeh app band karo" || trimmed == "ye app band karo"
+
+        if (isGenericClose) {
+            val pressed = accessibilityController.pressHome()
+            if (!pressed) {
+                try {
+                    val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                        addCategory(Intent.CATEGORY_HOME)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(homeIntent)
+                } catch (_: Exception) {}
+            }
+            val msg = when (targetLanguage) {
+                VoiceLanguage.HINGLISH -> "Certainly Sir, current app band kar diya hai."
+                VoiceLanguage.HINDI -> "जी सर, एप्लिकेशन बंद कर दिया गया है।"
+                VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, বর্তমান অ্যাপটি বন্ধ করা হয়েছে।"
+                else -> "Certainly Sir, closing active application."
+            }
+            return CommandExecutionResult.Success(msg, "CLOSE_APP")
+        }
+
+        val resolved = appLauncher.resolvePackageName(query)
+        if (resolved != null) {
+            val (pkg, name) = resolved
+            try {
+                val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+                am?.killBackgroundProcesses(pkg)
+            } catch (e: Exception) {
+                Log.w(TAG, "killBackgroundProcesses error: ${e.message}")
+            }
+            accessibilityController.pressHome()
+            try {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(homeIntent)
+            } catch (_: Exception) {}
+
+            val msg = when (targetLanguage) {
+                VoiceLanguage.HINGLISH -> "Certainly Sir, $name application band kar diya gaya hai."
+                VoiceLanguage.HINDI -> "जी सर, $name बंद कर दिया गया है।"
+                VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, $name অ্যাপ্লিকেশন বন্ধ করা হয়েছে।"
+                else -> "Certainly Sir, closed $name."
+            }
+            return CommandExecutionResult.Success(msg, "CLOSE_APP")
+        }
+
+        // Fallback: Return home
+        accessibilityController.pressHome()
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, '$query' band karke Home screen par aa gaye hain."
+            VoiceLanguage.HINDI -> "जी सर, एप्लिकेशन बंद कर दिया गया है।"
+            else -> "Certainly Sir, application closed."
+        }
+        return CommandExecutionResult.Success(msg, "CLOSE_APP")
+    }
+
+    // 1c. System Navigation & Activity Execution
+    fun goHome(targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        val pressed = accessibilityController.pressHome()
+        if (!pressed) {
+            try {
+                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(homeIntent)
+            } catch (_: Exception) {}
+        }
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, Home screen par aa gaye hain."
+            VoiceLanguage.HINDI -> "जी सर, होम स्क्रीन पर आ गए हैं।"
+            VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, হোম স্ক্রীনে যাওয়া হয়েছে।"
+            else -> "Certainly Sir, navigating to Home screen."
+        }
+        return CommandExecutionResult.Success(msg, "NAVIGATE_HOME")
+    }
+
+    fun goBack(targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        accessibilityController.pressBack()
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, peeche ja rahe hain."
+            VoiceLanguage.HINDI -> "जी सर, वापस जाया जा रहा है।"
+            VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, পিছনে যাওয়া হয়েছে।"
+            else -> "Navigating back, Sir."
+        }
+        return CommandExecutionResult.Success(msg, "NAVIGATE_BACK")
+    }
+
+    fun openRecents(targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        accessibilityController.pressRecents()
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, recent apps switcher open kar diya hai."
+            VoiceLanguage.HINDI -> "जी सर, हाल ही के ऐप्स दिखाए जा रहे हैं।"
+            VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, সাম্প্রতিক অ্যাপ্লিকেশনগুলি খোলা হয়েছে।"
+            else -> "Opening recent applications, Sir."
+        }
+        return CommandExecutionResult.Success(msg, "OPEN_RECENTS")
+    }
+
+    fun openNotifications(targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        accessibilityController.openNotifications()
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, notification panel open kar diya hai."
+            VoiceLanguage.HINDI -> "जी सर, सूचना पैनल खोला जा रहा है।"
+            VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, বিজ্ঞপ্তি প্যানেল খোলা হয়েছে।"
+            else -> "Opening notifications panel, Sir."
+        }
+        return CommandExecutionResult.Success(msg, "OPEN_NOTIFICATIONS")
+    }
+
+    fun scrollScreen(direction: String, targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        val isDown = direction.equals("down", ignoreCase = true) || direction.contains("niche", ignoreCase = true)
+        if (isDown) {
+            accessibilityController.scrollForward()
+        } else {
+            accessibilityController.scrollBackward()
+        }
+        val msg = when (targetLanguage) {
+            VoiceLanguage.HINGLISH -> "Certainly Sir, screen scroll kar diya hai."
+            VoiceLanguage.HINDI -> "जी सर, स्क्रीन स्क्रॉल कर दिया गया है।"
+            else -> "Scrolled screen, Sir."
+        }
+        return CommandExecutionResult.Success(msg, "SCROLL_SCREEN")
+    }
+
+    fun clickElement(targetText: String, targetLanguage: VoiceLanguage = VoiceLanguage.HINGLISH): CommandExecutionResult {
+        val clicked = accessibilityController.clickByText(targetText)
+        val msg = if (clicked) {
+            when (targetLanguage) {
+                VoiceLanguage.HINGLISH -> "Certainly Sir, '$targetText' par click kar diya hai."
+                VoiceLanguage.HINDI -> "जी सर, '$targetText' पर क्लिक कर दिया गया है।"
+                else -> "Clicked on '$targetText', Sir."
+            }
+        } else {
+            when (targetLanguage) {
+                VoiceLanguage.HINGLISH -> "Sir, screen par '$targetText' nahi mila."
+                VoiceLanguage.HINDI -> "सर, स्क्रीन पर '$targetText' नहीं मिला।"
+                else -> "Sir, I could not locate '$targetText' on the screen."
+            }
+        }
+        return if (clicked) CommandExecutionResult.Success(msg, "CLICK_ELEMENT") else CommandExecutionResult.Failed(msg)
     }
 
     // 2. Open Phone Dialer

@@ -1254,6 +1254,26 @@ class MaxForegroundService : Service() {
                 speakWithCoordination(msg, decision.language)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, msg, decision.language)
             }
+            is BrainDecision.CloseApp -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                val result = commandExecutor.closeApplication(decision.appName, decision.language)
+                handleCommandExecutionResult(result, decision.language)
+            }
+            is BrainDecision.PressHome -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                val result = commandExecutor.goHome(decision.language)
+                handleCommandExecutionResult(result, decision.language)
+            }
+            is BrainDecision.PressRecents -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                val result = commandExecutor.openRecents(decision.language)
+                handleCommandExecutionResult(result, decision.language)
+            }
+            is BrainDecision.OpenNotifications -> {
+                speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                val result = commandExecutor.openNotifications(decision.language)
+                handleCommandExecutionResult(result, decision.language)
+            }
             is BrainDecision.FillFormAssistance -> {
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.THINKING)
                 val fields = appInteractionManager.inspectVisibleFormFields()

@@ -212,6 +212,12 @@ class MaxVoiceEngine(
                             if (name.contains("fis")) score += 180      // Google en-gb-x-fis: Deep British male
                             if (name.contains("gbr")) score += 150      // Google en-gb-x-gbr
                             if (name.contains("male") && !name.contains("female")) score += 120
+                        } else if (locale.language.equals("hi", ignoreCase = true)) {
+                            // Premier Google Hindi male voice profiles for JARVIS in Hindi/Hinglish
+                            if (name.contains("hie")) score += 350      // Google hi-in-x-hie: The premier deep Hindi male
+                            if (name.contains("cfc")) score += 220      // Google hi-in-x-cfc: Natural Hindi male
+                            if (name.contains("male") && !name.contains("female")) score += 140
+                            if (country.equals("IN", ignoreCase = true)) score += 100
                         } else {
                             if (country.equals(locale.country, ignoreCase = true)) score += 150
                             if (name.contains("male") && !name.contains("female")) score += 100

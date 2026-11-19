@@ -242,99 +242,97 @@ class PhoneCommunicationManager(private val context: Context) {
 
         if (!hasContactPermission) return null
 
-        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
-        val projection = arrayOf(
-            ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-        )
+        // 1. Clean and normalize query: strip conversational filler and honorific words
+        val fillerRegex = Regex("(?i)^(to\\s+|call\\s+|phone\\s+|dial\\s+|please\\s+|zara\\s+|abhi\\s+|jaldi\\s+|urgent\\s+)+")
+        val suffixFillerRegex = Regex("(?i)(\\s+ko|\\s+ka|\\s+ki|\\s+se|\\s+ji|\\s+bhai|\\s+bhaiya|\\s+didi|\\s+sir|\\s+please|\\s+ko\\.)+$")
+        var cleanedQuery = contactName.trim().replace(fillerRegex, "").replace(suffixFillerRegex, "").trim()
+        if (cleanedQuery.isBlank()) cleanedQuery = contactName.trim()
 
-        // 1. Direct search
-        try {
-            val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
-            val selectionArgs = arrayOf("%$contactName%")
-            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-                    if (numberIndex >= 0) {
-                        val num = cursor.getString(numberIndex)
-                        val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: contactName else contactName
-                        if (!num.isNullOrBlank()) return ContactInfo(name, num)
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Direct lookup error: ${e.message}")
-        }
-
-        // 2. Transliterated / Normalized lookup (handles Devanagari/Bengali voice input vs Latin contacts with emojis)
-        val latinTarget = transliterateToLatin(contactName)
+        val latinTarget = transliterateToLatin(cleanedQuery)
             .replace(Regex("[^a-zA-Z0-9\\s]"), "")
             .trim()
             .lowercase(java.util.Locale.ROOT)
         val targetTokens = latinTarget.split("\\s+".toRegex()).filter { it.length >= 2 }
 
-        try {
-            var bestMatchName: String? = null
-            var bestMatchNum: String? = null
-            var bestMatchScore = 0
+        val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.NUMBER,
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.IS_PRIMARY
+        )
 
+        var bestMatchName: String? = null
+        var bestMatchNum: String? = null
+        var bestScore = -1
+
+        try {
             context.contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                 val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                val primaryIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.IS_PRIMARY)
+
                 if (nameIndex >= 0 && numberIndex >= 0) {
                     while (cursor.moveToNext()) {
                         val rawName = cursor.getString(nameIndex) ?: continue
-                        val cleanName = rawName.replace(Regex("[^a-zA-Z0-9\\s]"), "").trim().lowercase(java.util.Locale.ROOT)
                         val num = cursor.getString(numberIndex)
-                        if (cleanName.isEmpty() || num.isNullOrBlank()) continue
+                        if (rawName.isBlank() || num.isNullOrBlank()) continue
 
+                        val isPrimary = if (primaryIndex >= 0) cursor.getInt(primaryIndex) > 0 else false
+                        val cleanName = rawName.replace(Regex("[^a-zA-Z0-9\\s]"), "").trim().lowercase(java.util.Locale.ROOT)
                         val nameTokens = cleanName.split("\\s+".toRegex()).filter { it.length >= 2 }
 
-                        // Priority 1: Exact clean name match (ignoring emojis/punctuation)
-                        if (cleanName == latinTarget) {
-                            Log.i(TAG, "Exact match for '$contactName' -> '$rawName' ($num)")
-                            return ContactInfo(rawName, num)
+                        var score = 0
+
+                        // Priority 1: Exact Raw Display Name match (case-insensitive)
+                        if (rawName.equals(cleanedQuery, ignoreCase = true)) {
+                            score = 1500
+                        }
+                        // Priority 2: Exact Latin Normalized match
+                        else if (cleanName == latinTarget) {
+                            score = 1200
+                        }
+                        // Priority 3: Word-boundary exact token match (e.g. query "Raj" is a complete word in "Raj Sharma")
+                        else if (nameTokens.any { it == latinTarget }) {
+                            score = 950 - kotlin.math.abs(nameTokens.size - 1) * 30
+                        }
+                        // Priority 4: All query tokens exist in contact name
+                        else if (targetTokens.size >= 2 && targetTokens.all { t -> nameTokens.any { isFuzzyNameMatch(t, it) } }) {
+                            score = 850 - kotlin.math.abs(nameTokens.size - targetTokens.size) * 20
+                        }
+                        // Priority 5: Contact starts with target name (e.g. "Rajesh" when target is "Raj")
+                        else if (cleanName.startsWith(latinTarget) && latinTarget.length >= 3) {
+                            score = 700 - (cleanName.length - latinTarget.length) * 15
+                        }
+                        // Priority 6: First name fuzzy match
+                        else if (targetTokens.isNotEmpty() && nameTokens.isNotEmpty() && isFuzzyNameMatch(targetTokens[0], nameTokens[0])) {
+                            score = 650 - (nameTokens.size - 1) * 25
+                        }
+                        // Priority 7: Substring match (penalized for distance so it doesn't beat exact matches)
+                        else if (latinTarget.length >= 3 && cleanName.contains(latinTarget)) {
+                            score = 350 - (cleanName.length - latinTarget.length) * 10
                         }
 
-                        // Priority 2: cleanName contains entire latinTarget as phrase
-                        if (latinTarget.length >= 3 && cleanName.contains(latinTarget)) {
-                            if (bestMatchScore < 90) {
-                                bestMatchScore = 90
-                                bestMatchName = rawName
-                                bestMatchNum = num
-                                Log.i(TAG, "Phrase match candidate: '$rawName' ($num)")
-                            }
+                        // Bonus for primary phone numbers
+                        if (score > 0 && isPrimary) {
+                            score += 15
                         }
 
-                        // Priority 3: All target tokens match words in cleanName with phonetic/skeleton tolerance
-                        if (targetTokens.size >= 2 && targetTokens.all { tok -> nameTokens.any { isFuzzyNameMatch(tok, it) } }) {
-                            if (bestMatchScore < 85) {
-                                bestMatchScore = 85
-                                bestMatchName = rawName
-                                bestMatchNum = num
-                                Log.i(TAG, "All-tokens fuzzy match candidate: '$rawName' ($num)")
-                            }
-                        }
-
-                        // Priority 4: First token matches first name
-                        if (targetTokens.isNotEmpty() && nameTokens.isNotEmpty() && isFuzzyNameMatch(targetTokens[0], nameTokens[0])) {
-                            if (bestMatchScore < 70) {
-                                bestMatchScore = 70
-                                bestMatchName = rawName
-                                bestMatchNum = num
-                                Log.i(TAG, "First-name match candidate: '$rawName' ($num)")
-                            }
+                        if (score > bestScore) {
+                            bestScore = score
+                            bestMatchName = rawName
+                            bestMatchNum = num
+                            Log.d(TAG, "New best contact candidate: '$rawName' ($num) score=$score for query='$contactName'")
                         }
                     }
                 }
             }
-            if (bestMatchNum != null) {
-                Log.i(TAG, "Selected best matched contact for '$contactName' -> $bestMatchNum")
+
+            if (bestMatchNum != null && bestScore >= 200) {
+                Log.i(TAG, "Resolved optimal contact for '$contactName': '$bestMatchName' ($bestMatchNum) with confidence score $bestScore")
                 return ContactInfo(bestMatchName ?: contactName, bestMatchNum)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Normalized lookup error: ${e.message}")
+            Log.w(TAG, "Contact resolution error: ${e.message}")
         }
 
         return null

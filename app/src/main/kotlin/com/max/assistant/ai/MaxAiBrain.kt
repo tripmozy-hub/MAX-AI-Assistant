@@ -98,6 +98,10 @@ sealed class BrainDecision {
     data class NavigateBack(val language: VoiceLanguage) : BrainDecision()
     data class SwitchApp(val targetApp: String, val language: VoiceLanguage) : BrainDecision()
     data class CloseScreen(val language: VoiceLanguage) : BrainDecision()
+    data class CloseApp(val appName: String, val language: VoiceLanguage) : BrainDecision()
+    data class PressHome(val language: VoiceLanguage) : BrainDecision()
+    data class PressRecents(val language: VoiceLanguage) : BrainDecision()
+    data class OpenNotifications(val language: VoiceLanguage) : BrainDecision()
     data class FillFormAssistance(val query: String, val language: VoiceLanguage) : BrainDecision()
 
     // Multi-Step Task Execution Decisions
@@ -1209,7 +1213,7 @@ class MaxAiBrain(
         cleanLower: String,
         targetLang: VoiceLanguage
     ): BrainDecision? {
-        val cleanOriginal = original.replace(Regex("^(?i)(hey\\s+max|ok\\s+max|hello\\s+max|hey\\s+mac|hey\\s+mex|max|mac|mex|maks|macks|macs|मैक्स|मेक्स|ম্যাক্স|মেক্স|হেই\\s+ম্যাক্স|হে\\s+ম্যাক্স)[,\\s:]*"), "").trim()
+        val cleanOriginal = original.replace(Regex("^(?i)(hey\\s+jarvis|ok\\s+jarvis|hello\\s+jarvis|jarvis|जार्विस|হে\\s+জার্ভিস|hey\\s+max|ok\\s+max|hello\\s+max|hey\\s+mac|hey\\s+mex|max|mac|mex|maks|macks|macs|मैक्स|मेक्स|ম্যাক্স|মেক্স|হেই\\s+ম্যাক্স|হে\\s+ম্যাক্স)[,\\s:]*"), "").trim()
 
         // 1. Generic call request with no recipient
         // e.g. "call kro", "call karo", "call lagao", "mery baat krwao", "meri baat karwao", "phone lagao"
@@ -1258,7 +1262,17 @@ class MaxAiBrain(
         }
 
         // 3. "call lagao" / "phone lagao" / "call kro" / "call karo"
-        // Pattern 3A: "<target> ko call lagao/kro/karo" or "<target> ka call lagao"
+        // Pattern 3A: "<target> ko [abhi/zara/jaldi/please] call/phone/dial karo/lagao"
+        val hindiKoRegex = Regex("(?i)^(.+?)\\s+(?:ko|को|ka|का|ke|के)\\s+(?:abhi\\s+|zara\\s+|jaldi\\s+|please\\s+|urgent\\s+)?(?:call|phone|dial|fone|कॉल|फोन|फ़ोन|डायल)(?:\\s+(?:karo|kro|lagao|laga\\s+do|milao|mila\\s+do|kar\\s+do|करो|लगाओ|लगा\\s+दो|मिलाओ))?")
+        val koMatch = hindiKoRegex.find(cleanOriginal)
+        if (koMatch != null) {
+            var rawTarget = koMatch.groupValues[1].trim()
+            rawTarget = cleanContactTargetName(rawTarget)
+            if (rawTarget.isNotEmpty() && !isMaxName(rawTarget)) {
+                return BrainDecision.MakePhoneCall(rawTarget, requiresConfirmation = true)
+            }
+        }
+
         if (cleanLower.contains(" ko call lagao") || cleanLower.contains(" ko phone lagao") ||
             cleanLower.contains(" ko call kro") || cleanLower.contains(" ko call karo") ||
             cleanLower.contains(" ko call laga do") || cleanLower.contains(" ka call lagao") ||
@@ -1267,9 +1281,7 @@ class MaxAiBrain(
         ) {
             val delimiter = if (cleanLower.contains(" को ")) " को " else if (cleanLower.contains(" ka call")) " ka " else " ko "
             var target = cleanOriginal.substringBefore(delimiter).trim()
-            target = target.replace(Regex("(?i)^(hey\\s+max|ok\\s+max|hello\\s+max|max|mac|mex|maks|मैक्स|मेक्स)[,\\s:]*"), "")
-                .trimEnd('.', '?', '!', ',', ' ')
-                .trim()
+            target = cleanContactTargetName(target)
             if (target.isNotEmpty() && !isMaxName(target)) {
                 return BrainDecision.MakePhoneCall(target, requiresConfirmation = true)
             }
@@ -1325,9 +1337,21 @@ class MaxAiBrain(
         return null
     }
 
+    private fun cleanContactTargetName(raw: String): String {
+        return raw.replace(Regex("^(?i)(hey\\s+jarvis|ok\\s+jarvis|hello\\s+jarvis|jarvis|जार्विस|hey\\s+max|ok\\s+max|hello\\s+max|max|mac|mex|maks|मैक्स|मेक्स|ম্যাক্স)[,\\s:]*"), "")
+            .replace(Regex("^(?i)(to\\s+|please\\s+|zara\\s+|abhi\\s+|jaldi\\s+|urgent\\s+)"), "")
+            .removeSuffix(" ko").removeSuffix(" ko.").removeSuffix(" को").removeSuffix("কে")
+            .removeSuffix(" please").removeSuffix(" abhi").removeSuffix(" zara")
+            .trim('\'', '"', '?', '!', '.', ',', ' ', ':', ';', '-')
+            .trim()
+    }
+
     private fun isMaxName(name: String): Boolean {
         val lower = name.lowercase(Locale.ROOT).trim()
-        return lower in listOf("max", "mac", "mex", "maks", "macks", "macs", "मैक्स", "मेक्स", "ম্যাক্স", "মেক্স")
+        return lower in listOf(
+            "max", "mac", "mex", "maks", "macks", "macs", "मैक्स", "मेक्स", "ম্যাক্স", "মেক্স",
+            "jarvis", "jarves", "travis", "jarv", "garvis", "जार्विस", "জার্ভিস"
+        )
     }
 
     private fun parseMessageCommand(
@@ -1652,6 +1676,24 @@ class MaxAiBrain(
     }
 
     private fun parseAppControlCommands(cleanLower: String, trimmed: String, targetLang: VoiceLanguage): BrainDecision? {
+        // 0. Close Application: e.g. "close whatsapp", "whatsapp band karo", "close youtube", "band karo ye app", "app band karo", "ye app band karo"
+        val isExplicitClose = cleanLower.startsWith("close ") || cleanLower.contains(" band karo") ||
+                cleanLower.contains(" band kar do") || cleanLower.contains(" बंद करो") ||
+                cleanLower.startsWith("band karo ") || cleanLower.startsWith("exit ") || cleanLower.startsWith("kill ")
+        if (isExplicitClose && !cleanLower.contains("music") && !cleanLower.contains("song") && !cleanLower.contains("flashlight") && !cleanLower.contains("torch") && !cleanLower.contains("gaana")) {
+            var appTarget = cleanLower
+                .replace(Regex("^(hey\\s+jarvis|ok\\s+jarvis|jarvis|hey\\s+max|ok\\s+max|max|मैक्स|ম্যাক্স)[,\\s:]*"), "")
+                .replace(Regex("^(close|band\\s+karo|band\\s+kar\\s+do|exit|kill)\\s+"), "")
+                .replace(Regex("\\s+(band\\s+karo|band\\s+kar\\s+do|close|बंद\\s+करो|বন্ধ\\s+করো)$"), "")
+                .replace(Regex("^(the\\s+|this\\s+|ye\\s+|yeh\\s+|active\\s+)"), "")
+                .replace(Regex("\\s+(app|application)$"), "")
+                .trim()
+            if (appTarget == "this" || appTarget == "ye" || appTarget == "yeh" || appTarget.isBlank()) {
+                appTarget = "this app"
+            }
+            return BrainDecision.CloseApp(appTarget, targetLang)
+        }
+
         // 1. Scrolling
         if (cleanLower == "scroll down" || cleanLower.contains("scroll down") ||
             cleanLower.contains("niche scroll") || cleanLower.contains("নিচে স্ক্রোল") ||
@@ -1675,13 +1717,33 @@ class MaxAiBrain(
             return BrainDecision.NavigateBack(targetLang)
         }
 
-        // 3. Close Screen / Home
+        // 3. Navigation: Home Screen
         if (cleanLower.contains("close this screen") || cleanLower.contains("screen band karo") ||
             cleanLower.contains("স্ক্রিন বন্ধ করো") || cleanLower.contains("ye screen band") ||
             cleanLower == "home" || cleanLower == "go to home" || cleanLower == "home screen" ||
-            cleanLower.contains("home par jao") || cleanLower.contains("home jao")
+            cleanLower == "go home" || cleanLower.contains("home screen par jao") ||
+            cleanLower.contains("home par jao") || cleanLower.contains("home jao") ||
+            cleanLower == "হোম" || cleanLower == "হোম স্ক্রীন"
         ) {
-            return BrainDecision.CloseScreen(targetLang)
+            return BrainDecision.PressHome(targetLang)
+        }
+
+        // 3b. Navigation: Recent Applications Switcher
+        if (cleanLower == "recent apps" || cleanLower == "recent applications" || cleanLower == "recents" ||
+            cleanLower.contains("recent apps") || cleanLower.contains("recents dikhao") ||
+            cleanLower.contains("recent app dikhao") || cleanLower.contains("app switcher") ||
+            cleanLower.contains("saare apps dikhao")
+        ) {
+            return BrainDecision.PressRecents(targetLang)
+        }
+
+        // 3c. Navigation: Notifications Panel
+        if (cleanLower == "notifications" || cleanLower == "notification" || cleanLower == "notification panel" ||
+            cleanLower.contains("notification kholo") || cleanLower.contains("notifications dikhao") ||
+            cleanLower.contains("notification panel kholo") || cleanLower.contains("notification dekho") ||
+            cleanLower.contains("বিজ্ঞপ্তি")
+        ) {
+            return BrainDecision.OpenNotifications(targetLang)
         }
 
         // 4. Click nth option: e.g. "click the second option", "click 2nd option", "open the first result"

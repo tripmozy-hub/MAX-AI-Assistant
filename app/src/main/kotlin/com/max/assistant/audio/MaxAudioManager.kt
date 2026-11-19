@@ -39,6 +39,8 @@ class MaxAudioManager(context: Context) {
 
     /**
      * Request transient audio focus for speech playback with assistant usage.
+     * Uses AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK so background media (Spotify, YouTube Music, etc.)
+     * gently ducks instead of being paused or terminated.
      */
     fun requestAssistantFocus(): Boolean {
         if (audioManager == null) return false
@@ -50,9 +52,10 @@ class MaxAudioManager(context: Context) {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
 
-                focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
                     .setAudioAttributes(playbackAttributes)
-                    .setAcceptsDelayedFocusGain(false)
+                    .setAcceptsDelayedFocusGain(true)
+                    .setWillPauseWhenDucked(false)
                     .setOnAudioFocusChangeListener(focusChangeListener)
                     .build()
 
@@ -62,7 +65,7 @@ class MaxAudioManager(context: Context) {
                 audioManager.requestAudioFocus(
                     focusChangeListener,
                     AudioManager.STREAM_MUSIC,
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
                 )
             }
 

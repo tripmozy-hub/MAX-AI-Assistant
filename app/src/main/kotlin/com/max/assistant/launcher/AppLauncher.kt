@@ -356,4 +356,57 @@ class AppLauncher(private val context: Context) {
             context.packageManager.getLaunchIntentForPackage(packageName) != null
         }
     }
+
+    /**
+     * Resolves an app query string into a concrete (packageName, appDisplayName) pair.
+     */
+    fun resolvePackageName(query: String): Pair<String, String>? {
+        val trimmed = query.trim().lowercase()
+        var targetName = trimmed
+            .replace(Regex("^(hey\\s+jarvis|ok\\s+jarvis|jarvis|hey\\s+max|ok\\s+max|max|मैक्स|ম্যাক্স)[,\\s:]*"), "")
+            .trim()
+
+        val prefixes = listOf("close ", "stop ", "exit ", "kill ", "band karo ", "band kar do ", "बंद करो ")
+        for (p in prefixes) {
+            if (targetName.startsWith(p)) targetName = targetName.removePrefix(p).trim()
+        }
+        val suffixes = listOf(" band karo", " band kar do", " close karo", " close", " app", " application", " बंद करो")
+        for (s in suffixes) {
+            if (targetName.endsWith(s)) targetName = targetName.removeSuffix(s).trim()
+        }
+
+        if (targetName.isBlank()) return null
+
+        val candidates = KNOWN_APPS[targetName]
+        if (candidates != null) {
+            for (pkg in candidates) {
+                if (isPackageInstalled(pkg)) {
+                    val displayName = targetName.replaceFirstChar { it.uppercase() }
+                    return Pair(pkg, displayName)
+                }
+            }
+        }
+
+        val pm = context.packageManager
+        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+            addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
+        for (info in resolveInfos) {
+            val label = info.loadLabel(pm).toString().lowercase().trim()
+            val packageName = info.activityInfo.packageName
+            if (label == targetName) {
+                return Pair(packageName, info.loadLabel(pm).toString())
+            }
+        }
+
+        for (info in resolveInfos) {
+            val label = info.loadLabel(pm).toString().lowercase().trim()
+            val packageName = info.activityInfo.packageName
+            if (label.startsWith(targetName) || label.contains(" $targetName")) {
+                return Pair(packageName, info.loadLabel(pm).toString())
+            }
+        }
+        return null
+    }
 }
