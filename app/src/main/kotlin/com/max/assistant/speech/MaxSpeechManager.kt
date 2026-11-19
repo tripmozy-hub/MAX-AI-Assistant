@@ -246,6 +246,8 @@ class MaxSpeechManager(
         initializeRecognizer()
     }
 
+    private var useOnDeviceRecognizer = false
+
     private fun initializeRecognizer() {
         handler.post {
             destroyRecognizerInternal()
@@ -257,14 +259,13 @@ class MaxSpeechManager(
             }
 
             try {
-                // On Android 12+ (API 31+), prioritize on-device speech recognizer so that background music playback
-                // (e.g. Spotify, YouTube Music, Samsung Music) is never interrupted or paused by Google App audio focus steals.
-                speechRecognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
+                speechRecognizer = if (useOnDeviceRecognizer && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) {
                     Log.i(TAG, "Initializing On-Device SpeechRecognizer for seamless music & speech coexistence.")
                     SpeechRecognizer.createOnDeviceSpeechRecognizer(context).apply {
                         setRecognitionListener(createRecognitionListener())
                     }
                 } else {
+                    Log.i(TAG, "Initializing Standard Multi-lingual SpeechRecognizer for MAX.")
                     SpeechRecognizer.createSpeechRecognizer(context).apply {
                         setRecognitionListener(createRecognitionListener())
                     }
@@ -1106,7 +1107,7 @@ class MaxSpeechManager(
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 15)
             putExtra(RecognizerIntent.EXTRA_CONFIDENCE_SCORES, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, isMusicPlaying)
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
             putExtra("android.speech.extra.ENABLE_BIASING_DEVICE_CONTEXT", true)
             putExtra("android.speech.extra.AUDIO_SOURCE", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 
