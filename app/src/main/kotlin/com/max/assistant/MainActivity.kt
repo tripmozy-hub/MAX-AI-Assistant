@@ -20,6 +20,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import com.max.assistant.hud.ActivityEvent
+import com.max.assistant.hud.ActiveTaskState
+import com.max.assistant.hud.ScreenVisionUiState
+import com.max.assistant.hud.SystemTelemetryInfo
 import com.max.assistant.service.MaxForegroundService
 import com.max.assistant.speech.AssistantState
 import com.max.assistant.tts.VoiceLanguage
@@ -161,6 +165,10 @@ class MainActivity : ComponentActivity() {
                     val defaultPinFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
                     val defaultPendingActionFlow = remember { kotlinx.coroutines.flow.MutableStateFlow<com.max.assistant.action.PendingAction?>(null) }
                     val defaultBabyFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(com.max.assistant.baby.BabyModeState()) }
+                    val defaultEventsFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<ActivityEvent>()) }
+                    val defaultTaskFlow = remember { kotlinx.coroutines.flow.MutableStateFlow<ActiveTaskState?>(null) }
+                    val defaultVisionFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(ScreenVisionUiState()) }
+                    val defaultTelemetryFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(SystemTelemetryInfo()) }
 
                     val assistantState by (speechManager?.assistantState ?: defaultStateFlow).collectAsState()
                     val rmsLevel by (speechManager?.rmsLevel ?: defaultRmsFlow).collectAsState()
@@ -171,6 +179,10 @@ class MainActivity : ComponentActivity() {
                     val showPinDialog by (service?.showPinDialog ?: defaultPinFlow).collectAsState()
                     val pendingAction by (service?.confirmationManager?.pendingAction ?: defaultPendingActionFlow).collectAsState()
                     val babyModeState by (service?.babyEntertainmentManager?.state ?: defaultBabyFlow).collectAsState()
+                    val activityEvents by (service?.activityEvents ?: defaultEventsFlow).collectAsState()
+                    val activeTaskState by (service?.activeTaskState ?: defaultTaskFlow).collectAsState()
+                    val screenVisionState by (service?.screenVisionUiState ?: defaultVisionFlow).collectAsState()
+                    val systemTelemetry by (service?.systemTelemetry ?: defaultTelemetryFlow).collectAsState()
 
                     val conversationRepo = remember(service) {
                         service?.conversationRepo ?: com.max.assistant.ai.ConversationRepository.getInstance(this@MainActivity)
@@ -204,6 +216,10 @@ class MainActivity : ComponentActivity() {
                             pendingAction = pendingAction,
                             diagnosticInfo = diagnosticInfo,
                             recentHistory = recentHistory,
+                            activityEvents = activityEvents,
+                            activeTaskState = activeTaskState,
+                            screenVisionState = screenVisionState,
+                            systemTelemetry = systemTelemetry,
                             onToggleMute = {
                                 service?.toggleMute()
                             },
@@ -239,6 +255,12 @@ class MainActivity : ComponentActivity() {
                             },
                             onCancelAction = {
                                 service?.handleIncomingCommand("no")
+                            },
+                            onCancelTask = {
+                                service?.cancelCurrentTask()
+                            },
+                            onTriggerScreenVision = {
+                                service?.handleIncomingCommand("kya tum ye dekh rahe ho")
                             },
                             onInputLanguageChange = { lang ->
                                 service?.updateInputLanguage(lang)

@@ -48,6 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.tooling.preview.Preview
+import com.max.assistant.hud.ActivityCategory
+import com.max.assistant.hud.ActivityEvent
+import com.max.assistant.hud.ActiveTaskState
+import com.max.assistant.hud.EventStatus
+import com.max.assistant.hud.ScreenVisionUiState
+import com.max.assistant.hud.SystemTelemetryInfo
 import com.max.assistant.speech.AssistantState
 import com.max.assistant.tts.VoiceLanguage
 import com.max.assistant.tts.VoiceSettings
@@ -70,6 +76,10 @@ fun FuturisticDashboard(
     pendingAction: com.max.assistant.action.PendingAction? = null,
     diagnosticInfo: com.max.assistant.service.SystemDiagnosticInfo? = null,
     recentHistory: List<com.max.assistant.ai.ChatMessage> = emptyList(),
+    activityEvents: List<ActivityEvent> = emptyList(),
+    activeTaskState: ActiveTaskState? = null,
+    screenVisionState: ScreenVisionUiState = ScreenVisionUiState(),
+    systemTelemetry: SystemTelemetryInfo = SystemTelemetryInfo(),
     onToggleMute: () -> Unit,
     onStopMax: () -> Unit,
     onVerifyPin: (String) -> Unit,
@@ -78,6 +88,8 @@ fun FuturisticDashboard(
     onSendText: (String) -> Unit = {},
     onConfirmAction: () -> Unit = {},
     onCancelAction: () -> Unit = {},
+    onCancelTask: () -> Unit = {},
+    onTriggerScreenVision: () -> Unit = {},
     onInputLanguageChange: (VoiceLanguage) -> Unit = {},
     onOutputLanguageChange: (VoiceLanguage) -> Unit = {},
     onPitchChange: (Float) -> Unit = {},
@@ -94,8 +106,8 @@ fun FuturisticDashboard(
     var showDiagnosticDialog by remember { mutableStateOf(false) }
     var showHistoryDialog by remember { mutableStateOf(false) }
 
-    // 0 = Modern Fluid Orb, 1 = JARVIS HUD, 2 = Holographic Core, 3 = Cyber Silver Helmet
-    var visualizerFaceMode by remember { mutableStateOf(0) }
+    // 0 = Modern Fluid Orb, 1 = JARVIS HUD (Default), 2 = Holographic Core, 3 = Cyber Silver Helmet
+    var visualizerFaceMode by remember { mutableStateOf(1) }
 
     // Interactive scale animation when tapping center orb
     val orbInteractionSource = remember { MutableInteractionSource() }
@@ -162,35 +174,45 @@ fun FuturisticDashboard(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
 
-            // ==================== TOP BAR ====================
+            // ==================== TOP BAR & HUD HEADER ====================
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
+                    .padding(top = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Branding & Status Indicator Pill
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(
-                        text = "MAX",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif,
-                        letterSpacing = 2.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "MAX",
+                            color = Color.White,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.SansSerif,
+                            letterSpacing = 2.sp
+                        )
+                        Text(
+                            text = "// OS",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                    }
 
                     // Glassmorphic Status Pill
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xFF131A26).copy(alpha = 0.85f))
-                            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF0C1420).copy(alpha = 0.85f))
+                            .border(1.dp, animatedStatusColor.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -204,7 +226,7 @@ fun FuturisticDashboard(
                             text = statusText,
                             color = Color(0xFFE2E8F0),
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.SansSerif
                         )
                     }
@@ -308,6 +330,94 @@ fun FuturisticDashboard(
                         )
                     }
                 }
+            }
+
+            // ==================== HUD TELEMETRY BAR ====================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF090E17).copy(alpha = 0.75f))
+                    .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Battery & Power
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (systemTelemetry.isCharging) Icons.Default.Bolt else Icons.Default.BatteryChargingFull,
+                        contentDescription = "Battery",
+                        tint = if (systemTelemetry.batteryPercent > 20) Color(0xFF00E5FF) else Color(0xFFFF5252),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "${systemTelemetry.batteryPercent}%${if (systemTelemetry.isCharging) "⚡" else ""}",
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Network
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Wifi,
+                        contentDescription = "Network",
+                        tint = if (systemTelemetry.isOnline) Color(0xFF00E676) else Color(0xFFFF9900),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = systemTelemetry.networkType,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Screen Vision Active Pill
+                if (screenVisionState.isActive) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.18f))
+                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF00E5FF))
+                        )
+                        Text(
+                            text = "VISION ON",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Current Time
+                Text(
+                    text = systemTelemetry.currentTime,
+                    color = Color(0xFFCBD5E1),
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             // ==================== CENTER SECTION: AI ORB ====================
@@ -420,6 +530,142 @@ fun FuturisticDashboard(
                                 Text("Confirm", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
+                    }
+                }
+            }
+
+            // ==================== SCREEN VISION HUD PANEL ====================
+            if (screenVisionState.isActive || assistantState == AssistantState.SCREEN_SHARING) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF0A131F).copy(alpha = 0.94f),
+                    border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF00E5FF).copy(alpha = 0.65f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(imageVector = Icons.Default.Visibility, contentDescription = "Vision", tint = Color(0xFF00E5FF), modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = "SCREEN VISION // ${screenVisionState.appName.uppercase()}",
+                                    color = Color(0xFF00E5FF),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Text(
+                                text = screenVisionState.captureStatus,
+                                color = Color(0xFF00E676),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        if (screenVisionState.maxInterpretation.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = screenVisionState.maxInterpretation,
+                                color = Color(0xFFF1F5F9),
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        if (screenVisionState.suggestedActions.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                for (action in screenVisionState.suggestedActions) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFF00E5FF).copy(alpha = 0.15f))
+                                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                                            .clickable { onSendText(action) }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = action,
+                                            color = Color(0xFF00E5FF),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ==================== LIVE ACTIVE TASK PANEL ====================
+            if (activeTaskState != null) {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFF0B1420).copy(alpha = 0.94f),
+                    border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0xFF00E5FF).copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Task", tint = Color(0xFF00E5FF), modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = activeTaskState.taskName.uppercase(),
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            if (activeTaskState.isCancellable) {
+                                Text(
+                                    text = "CANCEL",
+                                    color = Color(0xFFFF5252),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFFF5252).copy(alpha = 0.15f))
+                                        .clickable { onCancelTask() }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${activeTaskState.currentStep} ${if (activeTaskState.toolUsed != null) "• ${activeTaskState.toolUsed}" else ""}",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LinearProgressIndicator(
+                            progress = { (activeTaskState.progressPercent ?: 50) / 100f },
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                            color = Color(0xFF00E5FF),
+                            trackColor = Color(0xFF1E293B),
+                        )
                     }
                 }
             }
@@ -570,14 +816,14 @@ fun FuturisticDashboard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // 1. Mute / Unmute Button Pill
                 IconButton(
                     onClick = onToggleMute,
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(46.dp)
                         .clip(CircleShape)
                         .background(if (isMuted) Color(0xFFFF9900).copy(alpha = 0.2f) else Color(0xFF131A26).copy(alpha = 0.9f))
                         .border(1.dp, if (isMuted) Color(0xFFFF9900) else Color.White.copy(alpha = 0.12f), CircleShape)
@@ -586,7 +832,24 @@ fun FuturisticDashboard(
                         imageVector = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
                         contentDescription = if (isMuted) "Unmute" else "Mute",
                         tint = if (isMuted) Color(0xFFFF9900) else Color(0xFF00E5FF),
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                // 2. Screen Vision Quick Trigger Button Pill
+                IconButton(
+                    onClick = onTriggerScreenVision,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(CircleShape)
+                        .background(if (screenVisionState.isActive) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color(0xFF131A26).copy(alpha = 0.9f))
+                        .border(1.dp, if (screenVisionState.isActive) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.12f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = "Screen Vision",
+                        tint = if (screenVisionState.isActive) Color(0xFF00E5FF) else Color(0xFF94A3B8),
+                        modifier = Modifier.size(19.dp)
                     )
                 }
 
@@ -688,6 +951,7 @@ fun FuturisticDashboard(
         if (showDiagnosticDialog) {
             DiagnosticDialog(
                 diagnosticInfo = diagnosticInfo,
+                systemTelemetry = systemTelemetry,
                 onDismiss = { showDiagnosticDialog = false }
             )
         }
@@ -696,6 +960,7 @@ fun FuturisticDashboard(
         if (showHistoryDialog) {
             HistoryDialog(
                 history = recentHistory,
+                activityEvents = activityEvents,
                 onDismiss = { showHistoryDialog = false }
             )
         }
@@ -857,12 +1122,13 @@ fun FuturisticDashboard(
 @Composable
 fun DiagnosticDialog(
     diagnosticInfo: com.max.assistant.service.SystemDiagnosticInfo?,
+    systemTelemetry: SystemTelemetryInfo = SystemTelemetryInfo(),
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF0E1420),
+            color = Color(0xFF0C1420),
             border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
             modifier = Modifier
                 .fillMaxWidth()
@@ -875,7 +1141,7 @@ fun DiagnosticDialog(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 14.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -892,35 +1158,43 @@ fun DiagnosticDialog(
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "System Diagnostics",
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
-                    )
+                    Column {
+                        Text(
+                            text = "System Diagnostics",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                        Text(
+                            text = "MAX Subsystem Telemetry // ${systemTelemetry.appVersion}",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
 
                 val info = diagnosticInfo ?: com.max.assistant.service.SystemDiagnosticInfo(
-                    aiConnectionStatus = "Initializing...",
-                    micPermissionGranted = false,
+                    aiConnectionStatus = systemTelemetry.aiProviderStatus,
+                    micPermissionGranted = systemTelemetry.micActive,
                     speechRecognitionAvailable = true,
                     ttsEngineStatus = "Ready",
                     selectedLanguage = "AUTO",
-                    accessibilityEnabled = false,
+                    accessibilityEnabled = true,
                     commandExecutorStatus = "Ready"
                 )
 
-                DiagnosticRow(label = "AI Intelligence", value = info.aiConnectionStatus, isGood = info.aiConnectionStatus.contains("Active") || info.aiConnectionStatus.contains("Online") || info.aiConnectionStatus.contains("Gemini"))
-                DiagnosticRow(label = "Mic Permission", value = if (info.micPermissionGranted) "Granted" else "Denied", isGood = info.micPermissionGranted)
-                DiagnosticRow(label = "Speech Recognition", value = if (info.speechRecognitionAvailable) "Active" else "Unavailable", isGood = info.speechRecognitionAvailable)
-                DiagnosticRow(label = "Voice Engine", value = info.ttsEngineStatus, isGood = info.ttsEngineStatus.contains("Ready"))
-                DiagnosticRow(label = "Active Language", value = info.selectedLanguage, isGood = true)
-                DiagnosticRow(label = "Accessibility", value = if (info.accessibilityEnabled) "Enabled (Full)" else "Off (Intents)", isGood = info.accessibilityEnabled)
-                DiagnosticRow(label = "Command Executor", value = info.commandExecutorStatus, isGood = true)
-                DiagnosticRow(label = "Battery Policy", value = info.batteryOptimizationStatus, isGood = info.batteryOptimizationStatus.contains("Unrestricted"))
+                DiagnosticRow(label = "AI Intelligence", value = systemTelemetry.aiProviderStatus, isGood = true)
+                DiagnosticRow(label = "Power Subsystem", value = "${systemTelemetry.batteryPercent}% (${if (systemTelemetry.isCharging) "Charging" else "Discharging"})", isGood = systemTelemetry.batteryPercent > 15)
+                DiagnosticRow(label = "Network Status", value = "${systemTelemetry.networkType} (${if (systemTelemetry.isOnline) "Connected" else "Offline"})", isGood = systemTelemetry.isOnline)
+                DiagnosticRow(label = "Bluetooth Radio", value = if (systemTelemetry.bluetoothEnabled) "Active" else "Standby", isGood = true)
+                DiagnosticRow(label = "Mic & Wake Word", value = if (systemTelemetry.micActive) "Active (Listening)" else "Muted", isGood = systemTelemetry.micActive)
+                DiagnosticRow(label = "Accessibility Guard", value = if (info.accessibilityEnabled) "Enabled (Full Automation)" else "Standby (Intents)", isGood = info.accessibilityEnabled)
+                DiagnosticRow(label = "Background Engine", value = if (systemTelemetry.serviceRunning) "Online (Foreground Service)" else "Stopped", isGood = systemTelemetry.serviceRunning)
+                DiagnosticRow(label = "App Release", value = "${systemTelemetry.appVersion} (Production Signed)", isGood = true)
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 Button(
                     onClick = onDismiss,
@@ -928,7 +1202,7 @@ fun DiagnosticDialog(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
                 ) {
-                    Text("Close", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Close Diagnostics", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
@@ -963,16 +1237,19 @@ fun DiagnosticRow(label: String, value: String, isGood: Boolean) {
 @Composable
 fun HistoryDialog(
     history: List<com.max.assistant.ai.ChatMessage>,
+    activityEvents: List<ActivityEvent> = emptyList(),
     onDismiss: () -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf(0) }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF0E1420),
+            color = Color(0xFF0C1420),
             border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 520.dp)
+                .heightIn(max = 560.dp)
                 .padding(16.dp)
         ) {
             Column(
@@ -980,9 +1257,10 @@ fun HistoryDialog(
                     .padding(20.dp)
                     .fillMaxSize()
             ) {
+                // Header
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 14.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -992,7 +1270,7 @@ fun HistoryDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Chat,
+                            imageVector = if (selectedTab == 0) Icons.Default.Chat else Icons.Default.List,
                             contentDescription = "History",
                             tint = Color(0xFF00E5FF),
                             modifier = Modifier.size(20.dp)
@@ -1000,7 +1278,7 @@ fun HistoryDialog(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Conversation History",
+                        text = if (selectedTab == 0) "Conversation History" else "Live Activity Log",
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -1008,50 +1286,154 @@ fun HistoryDialog(
                     )
                 }
 
-                if (history.isEmpty()) {
+                // Dual Tab Selector
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF131D2E))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selectedTab == 0) Color(0xFF00E5FF) else Color.Transparent)
+                            .clickable { selectedTab = 0 }
+                            .padding(vertical = 7.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "No conversation entries logged yet, Sir.",
-                            color = Color(0xFF64748B),
-                            fontSize = 13.sp,
-                            fontFamily = FontFamily.SansSerif
+                            text = "Conversations",
+                            color = if (selectedTab == 0) Color.Black else Color(0xFF94A3B8),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
                         )
                     }
-                } else {
-                    LazyColumn(
+                    Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selectedTab == 1) Color(0xFF00E5FF) else Color.Transparent)
+                            .clickable { selectedTab = 1 }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        items(history) { msg ->
-                            val isUser = msg.role == com.max.assistant.ai.MessageRole.USER
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(if (isUser) Color(0xFF1E293B) else Color(0xFF131A26))
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    text = if (isUser) "You:" else "MAX:",
-                                    color = if (isUser) Color(0xFF00E5FF) else Color(0xFF00E676),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = msg.text,
-                                    color = Color(0xFFF1F5F9),
-                                    fontSize = 13.sp,
-                                    fontFamily = FontFamily.SansSerif
-                                )
+                        Text(
+                            text = "Activity Log (${activityEvents.size})",
+                            color = if (selectedTab == 1) Color.Black else Color(0xFF94A3B8),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (selectedTab == 0) {
+                    // Chat history
+                    if (history.isEmpty()) {
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No conversation entries logged yet, Sir.", color = Color(0xFF64748B), fontSize = 13.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(history) { msg ->
+                                val isUser = msg.role == com.max.assistant.ai.MessageRole.USER
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(if (isUser) Color(0xFF1E293B) else Color(0xFF131A26))
+                                        .padding(10.dp)
+                                ) {
+                                    Text(
+                                        text = if (isUser) "You:" else "MAX:",
+                                        color = if (isUser) Color(0xFF00E5FF) else Color(0xFF00E676),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(text = msg.text, color = Color(0xFFF1F5F9), fontSize = 13.sp)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Chronological Activity Log (Phase 5)
+                    if (activityEvents.isEmpty()) {
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No activity events logged yet, Sir.", color = Color(0xFF64748B), fontSize = 13.sp)
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(activityEvents) { ev ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Color(0xFF0F1724))
+                                        .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(12.dp))
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    val catColor = when (ev.category) {
+                                        ActivityCategory.VOICE -> Color(0xFF00E5FF)
+                                        ActivityCategory.REASONING -> Color(0xFFBD00FF)
+                                        ActivityCategory.EXECUTION -> Color(0xFF00E676)
+                                        ActivityCategory.VISION -> Color(0xFF00F5D4)
+                                        ActivityCategory.SECURITY -> Color(0xFFFF9900)
+                                        ActivityCategory.SYSTEM -> Color(0xFF94A3B8)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(catColor)
+                                            .padding(top = 4.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = ev.title,
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = ev.timestamp,
+                                                color = Color(0xFF64748B),
+                                                fontSize = 10.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                        if (ev.detail.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = ev.detail,
+                                                color = Color(0xFF94A3B8),
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

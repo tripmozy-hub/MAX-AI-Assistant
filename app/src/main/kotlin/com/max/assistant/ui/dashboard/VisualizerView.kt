@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -438,15 +439,16 @@ private data class NeuralNode3D(
     val y: Float,
     val z: Float,
     val baseR: Float,
-    val pulsePhase: Float
+    val pulsePhase: Float,
+    val orbitSpeed: Float = 1.0f,
+    val shellIndex: Int = 0
 )
 
 /**
- * Procedural 3D Golden Neural Sphere Visualizer.
- * Matches the user's uploaded reference image:
- * Luminous amber synaptic sphere with rotating orbital shell,
- * inclined equatorial celestial ring, crossing energetic diagonal streak,
- * and speech-reactive audio displacement.
+ * Procedural 3D Neural Sphere Visualizer.
+ * Luminous multi-shell synaptic sphere with 3D perspective rotation,
+ * dynamic neural connections, inclined celestial rings, energy waves,
+ * and audio-reactive amplitude displacement matching MAX's live states.
  */
 @Composable
 fun HolographicCoreVisualizer(
@@ -456,20 +458,22 @@ fun HolographicCoreVisualizer(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "sphere_anim")
 
-    // Continuous 3D rotation
+    // Dynamic rotation speed based on state
+    val rotationSpeedMs = when (state) {
+        AssistantState.THINKING, AssistantState.PROCESSING -> 2800
+        AssistantState.SPEAKING -> 4200
+        AssistantState.LISTENING_FOR_COMMAND -> 5500
+        AssistantState.EXECUTING_COMMAND, AssistantState.VERIFYING -> 3600
+        AssistantState.SCREEN_SHARING -> 4500
+        AssistantState.STOPPED, AssistantState.MUTED -> 22000
+        else -> 9000
+    }
+
     val rotationAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = when (state) {
-                    AssistantState.SPEAKING -> 4000
-                    AssistantState.LISTENING_FOR_COMMAND -> 6000
-                    AssistantState.STOPPED, AssistantState.MUTED -> 20000
-                    else -> 10000
-                },
-                easing = LinearEasing
-            ),
+            animation = tween(durationMillis = rotationSpeedMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "rotation"
@@ -477,78 +481,124 @@ fun HolographicCoreVisualizer(
 
     // Breathing pulse
     val breathingPulse by infiniteTransition.animateFloat(
-        initialValue = 0.97f,
-        targetValue = 1.03f,
+        initialValue = 0.96f,
+        targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = FastOutSlowInEasing),
+            animation = tween(2000, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse"
+    )
+
+    // Expanding energy wave pulse
+    val energyWavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = if (state == AssistantState.THINKING) 900 else 1800,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "energy_wave"
     )
 
     // Pre-generate stable 3D nodes on multiple concentric shells
     val nodes = remember {
         val list = mutableListOf<NeuralNode3D>()
         val rnd = Random(42)
-        val count = 160
+        val count = 180
         for (i in 0 until count) {
             val u = rnd.nextFloat()
             val v = rnd.nextFloat()
             val theta = (u * 2.0 * Math.PI).toFloat()
             val phi = Math.acos((2.0 * v - 1.0).coerceIn(-1.0, 1.0)).toFloat()
-            val shell = if (rnd.nextFloat() < 0.45f) 0.65f else if (rnd.nextFloat() < 0.75f) 0.95f else 1.20f
-            val r = 110f * shell
+            val shellIdx = if (rnd.nextFloat() < 0.40f) 0 else if (rnd.nextFloat() < 0.75f) 1 else 2
+            val shellMultiplier = when (shellIdx) {
+                0 -> 0.65f
+                1 -> 0.95f
+                else -> 1.25f
+            }
+            val r = 110f * shellMultiplier
 
             val nx = r * sin(phi) * cos(theta)
             val ny = r * sin(phi) * sin(theta)
             val nz = r * cos(phi)
-            list.add(NeuralNode3D(nx, ny, nz, r, rnd.nextFloat() * 6.28f))
+            list.add(
+                NeuralNode3D(
+                    x = nx,
+                    y = ny,
+                    z = nz,
+                    baseR = r,
+                    pulsePhase = rnd.nextFloat() * 6.28f,
+                    orbitSpeed = 0.8f + rnd.nextFloat() * 0.4f,
+                    shellIndex = shellIdx
+                )
+            )
         }
         list
     }
 
-    // Dynamic color palettes matching the amber neural sphere
-    val (primaryGold, filamentGold, coreGlow) = when (state) {
-        AssistantState.STOPPED -> Triple(Color(0xFF6E563B), Color(0xFF4A3A27), Color(0xFF332616))
-        AssistantState.MUTED -> Triple(Color(0xFFFF9900), Color(0xFFCC7000), Color(0xFF663300))
-        AssistantState.LISTENING_FOR_COMMAND -> Triple(Color(0xFFFFB347), Color(0xFFFFA000), Color(0xFFFF8F00))
-        AssistantState.SPEAKING -> Triple(Color(0xFFFFE082), Color(0xFFFFB74D), Color(0xFFFF9100))
-        AssistantState.AWAITING_PIN -> Triple(Color(0xFFFFCC00), Color(0xFFFF9900), Color(0xFF664400))
-        else -> Triple(Color(0xFFFFA726), Color(0xFFFF8F00), Color(0xFF553300))
+    // Dynamic color palettes matching MAX's JARVIS theme across all states
+    val (primaryColor, accentColor, coreGlow) = when (state) {
+        AssistantState.STOPPED -> Triple(Color(0xFF556677), Color(0xFF334455), Color(0xFF10161C))
+        AssistantState.MUTED -> Triple(Color(0xFFFF9900), Color(0xFFCC7000), Color(0xFF261503))
+        AssistantState.LISTENING_FOR_COMMAND -> Triple(Color(0xFF00FFFF), Color(0xFF00B4D8), Color(0xFF022B42))
+        AssistantState.THINKING, AssistantState.PROCESSING -> Triple(Color(0xFFBD00FF), Color(0xFF7000FF), Color(0xFF240046))
+        AssistantState.SPEAKING -> Triple(Color(0xFF40C4FF), Color(0xFF00E5FF), Color(0xFF032840))
+        AssistantState.EXECUTING_COMMAND, AssistantState.VERIFYING -> Triple(Color(0xFF00F5D4), Color(0xFF00BBF9), Color(0xFF032630))
+        AssistantState.SCREEN_SHARING -> Triple(Color(0xFF00E5FF), Color(0xFF00B0FF), Color(0xFF021B2E))
+        AssistantState.COMPLETED -> Triple(Color(0xFF00E676), Color(0xFF00B0FF), Color(0xFF02291A))
+        AssistantState.FAILED -> Triple(Color(0xFFFF3344), Color(0xFFCC1122), Color(0xFF330509))
+        AssistantState.AWAITING_PIN -> Triple(Color(0xFFFFCC00), Color(0xFFFF9900), Color(0xFF332400))
+        else -> Triple(Color(0xFF00E5FF), Color(0xFF0090FF), Color(0xFF041829))
     }
 
     Box(
-        modifier = modifier.size(290.dp),
+        modifier = modifier.size(300.dp),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
-            val activeBoost = rmsLevel * 22f
-            val pulse = breathingPulse + (rmsLevel * 0.15f)
+            val activeBoost = rmsLevel * 24f
+            val pulse = breathingPulse + (rmsLevel * 0.16f)
 
-            // 1. Soft radial back-glow
+            // 1. Soft radial background bloom
+            val glowRadius = (size.minDimension / 2f) * pulse * 1.1f
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        filamentGold.copy(alpha = if (state == AssistantState.STOPPED) 0.12f else 0.42f + (rmsLevel * 0.3f)),
+                        primaryColor.copy(alpha = if (state == AssistantState.STOPPED) 0.10f else 0.40f + (rmsLevel * 0.35f)),
+                        accentColor.copy(alpha = 0.15f),
                         Color.Transparent
                     ),
                     center = center,
-                    radius = (size.minDimension / 2f) * pulse
+                    radius = glowRadius
                 ),
                 center = center,
-                radius = (size.minDimension / 2f) * pulse
+                radius = glowRadius
             )
 
-            // 2. Project 3D nodes onto 2D plane with rotation
+            // 2. Animated radiating energy waves
+            val waveRadius = ((energyWavePhase * 120f) + 40f) * pulse
+            val waveAlpha = ((1f - energyWavePhase) * (0.5f + rmsLevel * 0.4f)).coerceIn(0f, 0.85f)
+            drawCircle(
+                color = primaryColor.copy(alpha = waveAlpha),
+                radius = waveRadius,
+                center = center,
+                style = Stroke(width = 1.6f + (rmsLevel * 1.5f))
+            )
+
+            // 3. Project 3D nodes onto 2D plane with perspective rotation
             val rotYRad = Math.toRadians(rotationAngle.toDouble()).toFloat()
-            val rotXRad = 0.28f // static tilt
+            val rotXRad = 0.32f // Cinematic tilt
             val cosY = cos(rotYRad)
             val sinY = sin(rotYRad)
             val cosX = cos(rotXRad)
             val sinX = sin(rotXRad)
 
-            data class ProjectedPt(val x: Float, val y: Float, val z: Float, val alpha: Float, val size: Float)
+            data class ProjectedPt(val x: Float, val y: Float, val z: Float, val alpha: Float, val size: Float, val shell: Int)
             val projected = nodes.map { node ->
                 val currentR = (node.baseR + activeBoost) * pulse
                 val origLen = sqrt(node.x * node.x + node.y * node.y + node.z * node.z).coerceAtLeast(1f)
@@ -564,93 +614,95 @@ fun HolographicCoreVisualizer(
                 val y2 = ny * cosX - z1 * sinX
                 val z2 = ny * sinX + z1 * cosX
 
-                val fov = 340f
-                val scale = fov / (fov + z2 + 100f)
-                val alpha = ((z2 + 120f) / 240f).coerceIn(0.15f, 0.95f)
+                val fov = 360f
+                val scale = fov / (fov + z2 + 110f)
+                val alpha = ((z2 + 130f) / 260f).coerceIn(0.18f, 0.98f)
                 ProjectedPt(
                     x = center.x + x1 * scale,
                     y = center.y + y2 * scale,
                     z = z2,
                     alpha = alpha,
-                    size = (scale * 2.2f) + (rmsLevel * 2.0f)
+                    size = (scale * 2.4f) + (rmsLevel * 2.2f),
+                    shell = node.shellIndex
                 )
             }.sortedBy { it.z }
 
-            // 3. Draw neural filaments connecting nearby projected points
-            val filamentMaxDistSq = 1400f * (1f + rmsLevel * 0.8f)
-            for (i in projected.indices step 2) {
+            // 4. Draw neural filaments connecting nearby 3D points
+            val filamentMaxDistSq = 1600f * (1f + rmsLevel * 0.9f)
+            val stepSize = if (state == AssistantState.THINKING) 1 else 2
+            for (i in 0 until projected.size - 2 step stepSize) {
                 val p1 = projected[i]
-                for (j in (i + 1) until minOf(i + 6, projected.size)) {
+                for (j in (i + 1) until minOf(i + 7, projected.size)) {
                     val p2 = projected[j]
                     val dx = p1.x - p2.x
                     val dy = p1.y - p2.y
                     val distSq = dx * dx + dy * dy
                     if (distSq < filamentMaxDistSq) {
-                        val lineAlpha = (1f - distSq / filamentMaxDistSq) * minOf(p1.alpha, p2.alpha) * (0.45f + rmsLevel * 0.45f)
+                        val lineAlpha = (1f - distSq / filamentMaxDistSq) * minOf(p1.alpha, p2.alpha) * (0.50f + rmsLevel * 0.50f)
                         drawLine(
-                            color = filamentGold.copy(alpha = lineAlpha.coerceIn(0f, 1f)),
+                            color = primaryColor.copy(alpha = lineAlpha.coerceIn(0f, 1f)),
                             start = Offset(p1.x, p1.y),
                             end = Offset(p2.x, p2.y),
-                            strokeWidth = 1.0f + (rmsLevel * 1.2f)
+                            strokeWidth = 1.0f + (rmsLevel * 1.4f)
                         )
                     }
                 }
             }
 
-            // 4. Draw 3D neural nodes/particles
+            // 5. Draw 3D neural nodes/particles
             for (p in projected) {
+                val ptColor = if (p.z > 30f) Color.White.copy(alpha = p.alpha) else primaryColor.copy(alpha = p.alpha)
                 drawCircle(
-                    color = if (p.z > 20f) Color(0xFFFFF0D0).copy(alpha = p.alpha) else primaryGold.copy(alpha = p.alpha),
+                    color = ptColor,
                     radius = p.size.coerceAtLeast(1.0f),
                     center = Offset(p.x, p.y)
                 )
             }
 
-            // 5. Inclined Saturn-like Celestial Equatorial Ring (Matching Image)
-            rotate(degrees = -10f, pivot = center) {
-                val ringRadiusX = 118f * pulse
-                val ringRadiusY = 38f * pulse
+            // 6. Inclined Equatorial Celestial Ring
+            rotate(degrees = -14f, pivot = center) {
+                val ringRadiusX = 124f * pulse
+                val ringRadiusY = 36f * pulse
 
                 // Main glowing ring
                 drawOval(
-                    color = primaryGold.copy(alpha = 0.85f + (rmsLevel * 0.15f)),
+                    color = primaryColor.copy(alpha = 0.88f + (rmsLevel * 0.12f)),
                     topLeft = Offset(center.x - ringRadiusX, center.y - ringRadiusY),
                     size = Size(ringRadiusX * 2, ringRadiusY * 2),
-                    style = Stroke(width = 3.2f + (rmsLevel * 2.5f))
+                    style = Stroke(width = 3.2f + (rmsLevel * 2.6f))
                 )
 
                 // Secondary dashed orbit ring
-                val outerRadiusX = 132f * pulse
+                val outerRadiusX = 142f * pulse
                 val outerRadiusY = 44f * pulse
                 drawOval(
-                    color = filamentGold.copy(alpha = 0.5f),
+                    color = accentColor.copy(alpha = 0.55f),
                     topLeft = Offset(center.x - outerRadiusX, center.y - outerRadiusY),
                     size = Size(outerRadiusX * 2, outerRadiusY * 2),
-                    style = Stroke(width = 1.2f)
+                    style = Stroke(width = 1.4f)
                 )
             }
 
-            // 6. Bright Crossing Diagonal Streak Line (Matching Image top-left to bottom-right)
-            val streakLength = 105f * pulse
-            val streakAngleRad = Math.toRadians(-58.0).toFloat()
-            val dxStreak = cos(streakAngleRad) * streakLength
-            val dyStreak = sin(streakAngleRad) * streakLength
-            drawLine(
-                color = Color(0xFFFFF7E6).copy(alpha = 0.9f),
-                start = Offset(center.x - dxStreak, center.y - dyStreak),
-                end = Offset(center.x + dxStreak, center.y + dyStreak),
-                strokeWidth = 2.6f + (rmsLevel * 2.0f),
-                cap = StrokeCap.Round
-            )
+            // 7. Dynamic Screen Vision Scanning Beam (When SCREEN_SHARING is active)
+            if (state == AssistantState.SCREEN_SHARING) {
+                val scanY = center.y + ((energyWavePhase * 180f) - 90f)
+                drawLine(
+                    color = Color(0xFF00FFFF).copy(alpha = 0.85f),
+                    start = Offset(center.x - 120f, scanY),
+                    end = Offset(center.x + 120f, scanY),
+                    strokeWidth = 2.4f,
+                    cap = StrokeCap.Round
+                )
+            }
 
-            // 7. Dense Glowing Synaptic Core
-            val coreRadius = 38f * pulse + (rmsLevel * 10f)
+            // 8. Luminous Synaptic Core Nucleus
+            val coreRadius = 40f * pulse + (rmsLevel * 12f)
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0xFFFFF5DC),
-                        primaryGold.copy(alpha = 0.9f),
-                        filamentGold.copy(alpha = 0.4f),
+                        Color.White,
+                        primaryColor.copy(alpha = 0.95f),
+                        accentColor.copy(alpha = 0.45f),
                         Color.Transparent
                     ),
                     center = center,
@@ -661,7 +713,7 @@ fun HolographicCoreVisualizer(
             )
         }
 
-        // Central "MAX" title in clean, elegant typography within the core
+        // Central "MAX" title in clean, high-tech glowing typography
         Text(
             text = "MAX",
             color = Color.White,
@@ -674,10 +726,13 @@ fun HolographicCoreVisualizer(
 }
 
 /**
- * Procedural JARVIS HUD Holographic Reactor Visualizer.
- * Matches the user's uploaded reference image of the monitor:
- * Glowing cyan/blue neon ring, compass tick ring, rotating orbital arcs,
- * inner dark glass disc, and centered futuristic "MAX" typography.
+ * Procedural JARVIS HUD Holographic Arc Reactor Visualizer.
+ * Complete Iron Man Laboratory holographic interface:
+ * 360-degree compass tick ring with angle telemetry,
+ * counter-rotating segmented orbital arcs with state acceleration,
+ * middle glowing neon ring with audio-reactive waveform displacement,
+ * expanding radiating energy waves, orbiting 3D particles with z-perspective,
+ * inner dark glass reactor disc, and state-reactive holographic HUD overlays.
  */
 @Composable
 fun JarvisHudVisualizer(
@@ -685,13 +740,31 @@ fun JarvisHudVisualizer(
     rmsLevel: Float,
     state: AssistantState
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "jarvis_anim")
+    val infiniteTransition = rememberInfiniteTransition(label = "jarvis_hud_anim")
+
+    // Dynamic rotation speed based on state
+    val outerDurationMs = when (state) {
+        AssistantState.THINKING, AssistantState.PROCESSING -> 3500
+        AssistantState.EXECUTING_COMMAND, AssistantState.VERIFYING -> 4500
+        AssistantState.SPEAKING -> 8000
+        AssistantState.LISTENING_FOR_COMMAND -> 10000
+        AssistantState.STOPPED, AssistantState.MUTED -> 30000
+        else -> 16000
+    }
+    val innerDurationMs = when (state) {
+        AssistantState.THINKING, AssistantState.PROCESSING -> 2500
+        AssistantState.EXECUTING_COMMAND, AssistantState.VERIFYING -> 3200
+        AssistantState.SPEAKING -> 6000
+        AssistantState.LISTENING_FOR_COMMAND -> 7500
+        AssistantState.STOPPED, AssistantState.MUTED -> 24000
+        else -> 11000
+    }
 
     val outerRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(18000, easing = LinearEasing),
+            animation = tween(outerDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "outer_rot"
@@ -701,15 +774,15 @@ fun JarvisHudVisualizer(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = LinearEasing),
+            animation = tween(innerDurationMs, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "inner_rot"
     )
 
     val breathingPulse by infiniteTransition.animateFloat(
-        initialValue = 0.98f,
-        targetValue = 1.02f,
+        initialValue = 0.97f,
+        targetValue = 1.03f,
         animationSpec = infiniteRepeatable(
             animation = tween(2200, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -717,126 +790,219 @@ fun JarvisHudVisualizer(
         label = "jarvis_pulse"
     )
 
-    val (cyanPrimary, cyanAccent, coreBg) = when (state) {
+    val energyWavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = if (state == AssistantState.SPEAKING) 1200 else 2400,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "energy_wave"
+    )
+
+    // State-driven color palettes
+    val (primaryColor, accentColor, coreBg) = when (state) {
         AssistantState.STOPPED -> Triple(Color(0xFF556677), Color(0xFF334455), Color(0xFF0C1014))
         AssistantState.MUTED -> Triple(Color(0xFFFF9900), Color(0xFFCC7000), Color(0xFF140C04))
         AssistantState.LISTENING_FOR_COMMAND -> Triple(Color(0xFF00FFFF), Color(0xFF00B4D8), Color(0xFF041824))
-        AssistantState.SPEAKING -> Triple(Color(0xFFE0F7FA), Color(0xFF00E5FF), Color(0xFF052236))
-        AssistantState.AWAITING_PIN -> Triple(Color(0xFFFFCC00), Color(0xFFFF9900), Color(0xFF161104))
+        AssistantState.THINKING, AssistantState.PROCESSING -> Triple(Color(0xFFBD00FF), Color(0xFF00E5FF), Color(0xFF160938))
+        AssistantState.SPEAKING -> Triple(Color(0xFF40C4FF), Color(0xFF00E5FF), Color(0xFF032238))
+        AssistantState.EXECUTING_COMMAND, AssistantState.VERIFYING -> Triple(Color(0xFF00F5D4), Color(0xFF00B0FF), Color(0xFF021B26))
+        AssistantState.SCREEN_SHARING -> Triple(Color(0xFF00E5FF), Color(0xFF00B0FF), Color(0xFF021E33))
+        AssistantState.COMPLETED -> Triple(Color(0xFF00E676), Color(0xFF00E5FF), Color(0xFF022616))
+        AssistantState.FAILED -> Triple(Color(0xFFFF3344), Color(0xFFFF9900), Color(0xFF2E090D))
+        AssistantState.AWAITING_PIN -> Triple(Color(0xFFFFCC00), Color(0xFFFF9900), Color(0xFF1A1303))
         else -> Triple(Color(0xFF00E5FF), Color(0xFF0090FF), Color(0xFF030D17))
     }
 
     Box(
-        modifier = modifier.size(290.dp),
+        modifier = modifier.size(300.dp),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2f, size.height / 2f)
-            val pulse = breathingPulse + (rmsLevel * 0.12f)
+            val pulse = breathingPulse + (rmsLevel * 0.14f)
             val baseRadius = (size.minDimension / 2f) * 0.88f * pulse
 
-            // 1. Soft Outer Cyan Bloom
+            // 1. Soft Outer Holographic Bloom
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        cyanPrimary.copy(alpha = if (state == AssistantState.STOPPED) 0.1f else 0.35f + (rmsLevel * 0.25f)),
-                        cyanAccent.copy(alpha = 0.1f),
+                        primaryColor.copy(alpha = if (state == AssistantState.STOPPED) 0.10f else 0.38f + (rmsLevel * 0.30f)),
+                        accentColor.copy(alpha = 0.12f),
                         Color.Transparent
                     ),
                     center = center,
-                    radius = baseRadius * 1.15f
+                    radius = baseRadius * 1.20f
                 ),
                 center = center,
-                radius = baseRadius * 1.15f
+                radius = baseRadius * 1.20f
             )
 
-            // 2. Fine Outer Circular Ring
+            // 2. Fine Outer Circular Track Ring
             drawCircle(
-                color = cyanPrimary.copy(alpha = 0.3f),
+                color = primaryColor.copy(alpha = 0.32f),
                 radius = baseRadius,
                 center = center,
                 style = Stroke(width = 1.2f)
             )
 
             // 3. 360-degree Radial Compass Ticks (Exact JARVIS HUD detail)
-            rotate(degrees = outerRotation * 0.2f, pivot = center) {
+            rotate(degrees = outerRotation * 0.18f, pivot = center) {
                 val tickOuter = baseRadius
-                for (deg in 0 until 360 step 10) {
+                for (deg in 0 until 360 step 6) {
                     val rad = Math.toRadians(deg.toDouble()).toFloat()
                     val isMajor = deg % 30 == 0
-                    val tickInner = tickOuter - if (isMajor) 10.dp.toPx() else 6.dp.toPx()
+                    val isSemiMajor = deg % 15 == 0 && !isMajor
+                    val tickLen = if (isMajor) 10.dp.toPx() else if (isSemiMajor) 6.dp.toPx() else 3.5.dp.toPx()
+                    val tickInner = tickOuter - tickLen
                     val x1 = center.x + tickOuter * cos(rad)
                     val y1 = center.y + tickOuter * sin(rad)
                     val x2 = center.x + tickInner * cos(rad)
                     val y2 = center.y + tickInner * sin(rad)
 
                     drawLine(
-                        color = cyanPrimary.copy(alpha = if (isMajor) 0.8f else 0.4f),
+                        color = primaryColor.copy(alpha = if (isMajor) 0.85f else if (isSemiMajor) 0.50f else 0.25f),
                         start = Offset(x1, y1),
                         end = Offset(x2, y2),
-                        strokeWidth = if (isMajor) 2f else 1.2f
+                        strokeWidth = if (isMajor) 2.2f else if (isSemiMajor) 1.4f else 0.9f
                     )
                 }
             }
 
-            // 4. Rotating Outer Orbital Arcs (Matching JARVIS monitor photo)
+            // 4. Rotating Outer Orbital Segments (Clockwise)
             rotate(degrees = outerRotation, pivot = center) {
+                // Primary bright white arc
                 drawArc(
-                    color = Color.White.copy(alpha = 0.9f),
-                    startAngle = 10f,
-                    sweepAngle = 55f,
+                    color = Color.White.copy(alpha = 0.92f),
+                    startAngle = 15f,
+                    sweepAngle = 50f,
                     useCenter = false,
                     topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
                     size = Size(baseRadius * 2, baseRadius * 2),
-                    style = Stroke(width = 2.8f, cap = StrokeCap.Round)
+                    style = Stroke(width = 3.0f, cap = StrokeCap.Round)
+                )
+                // Secondary cyan arc
+                drawArc(
+                    color = primaryColor.copy(alpha = 0.85f),
+                    startAngle = 135f,
+                    sweepAngle = 65f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
+                    size = Size(baseRadius * 2, baseRadius * 2),
+                    style = Stroke(width = 2.4f, cap = StrokeCap.Round)
+                )
+                // Third accent arc
+                drawArc(
+                    color = accentColor.copy(alpha = 0.70f),
+                    startAngle = 265f,
+                    sweepAngle = 45f,
+                    useCenter = false,
+                    topLeft = Offset(center.x - baseRadius, center.y - baseRadius),
+                    size = Size(baseRadius * 2, baseRadius * 2),
+                    style = Stroke(width = 2.0f, cap = StrokeCap.Round)
                 )
             }
 
+            // 5. Counter-Rotating Inner Orbital Segments (Counter-Clockwise)
             rotate(degrees = innerRotation, pivot = center) {
-                val arcRadius = baseRadius * 0.92f
+                val arcRadius = baseRadius * 0.91f
                 drawArc(
-                    color = cyanPrimary.copy(alpha = 0.85f),
-                    startAngle = 180f,
-                    sweepAngle = 40f,
+                    color = primaryColor.copy(alpha = 0.88f),
+                    startAngle = 190f,
+                    sweepAngle = 45f,
                     useCenter = false,
                     topLeft = Offset(center.x - arcRadius, center.y - arcRadius),
                     size = Size(arcRadius * 2, arcRadius * 2),
                     style = Stroke(width = 3.2f, cap = StrokeCap.Round)
                 )
                 drawArc(
-                    color = cyanAccent.copy(alpha = 0.7f),
-                    startAngle = 320f,
-                    sweepAngle = 35f,
+                    color = accentColor.copy(alpha = 0.75f),
+                    startAngle = 330f,
+                    sweepAngle = 40f,
                     useCenter = false,
                     topLeft = Offset(center.x - arcRadius, center.y - arcRadius),
                     size = Size(arcRadius * 2, arcRadius * 2),
-                    style = Stroke(width = 2f, cap = StrokeCap.Round)
+                    style = Stroke(width = 2.2f, cap = StrokeCap.Round)
                 )
             }
 
-            // 5. Middle Glowing Neon Ring (The signature glowing ring from photo)
-            val middleRingRadius = baseRadius * 0.58f
+            // 6. Expanding Radiating Energy Waves
+            val waveRadius = ((energyWavePhase * baseRadius * 0.70f) + baseRadius * 0.35f)
+            val waveAlpha = ((1f - energyWavePhase) * (0.45f + rmsLevel * 0.45f)).coerceIn(0f, 0.90f)
             drawCircle(
-                color = cyanPrimary.copy(alpha = 0.95f),
-                radius = middleRingRadius,
+                color = primaryColor.copy(alpha = waveAlpha),
+                radius = waveRadius,
                 center = center,
-                style = Stroke(width = 3.6f + (rmsLevel * 2.5f))
-            )
-            drawCircle(
-                color = Color.White.copy(alpha = 0.7f),
-                radius = middleRingRadius - 2.dp.toPx(),
-                center = center,
-                style = Stroke(width = 1.2f)
+                style = Stroke(width = 1.8f + (rmsLevel * 1.8f))
             )
 
-            // 6. Inner Dark Core Disc
+            // 7. Middle Glowing Neon Ring with Audio-Reactive Waveform
+            val middleRingRadius = baseRadius * 0.58f
+            if (state == AssistantState.SPEAKING || state == AssistantState.LISTENING_FOR_COMMAND) {
+                // Waveform path around the circle
+                val wavePath = Path()
+                val wavePoints = 48
+                for (i in 0..wavePoints) {
+                    val deg = (i.toFloat() / wavePoints) * 360f
+                    val rad = Math.toRadians(deg.toDouble()).toFloat()
+                    val waveAmp = sin(rad * 6f + outerRotation * 0.1f) * (rmsLevel * 10f)
+                    val r = middleRingRadius + waveAmp
+                    val px = center.x + r * cos(rad)
+                    val py = center.y + r * sin(rad)
+                    if (i == 0) wavePath.moveTo(px, py) else wavePath.lineTo(px, py)
+                }
+                wavePath.close()
+                drawPath(
+                    path = wavePath,
+                    color = primaryColor.copy(alpha = 0.95f),
+                    style = Stroke(width = 3.4f + (rmsLevel * 2.8f), cap = StrokeCap.Round)
+                )
+            } else {
+                drawCircle(
+                    color = primaryColor.copy(alpha = 0.95f),
+                    radius = middleRingRadius,
+                    center = center,
+                    style = Stroke(width = 3.6f + (rmsLevel * 2.5f))
+                )
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.75f),
+                    radius = middleRingRadius - 2.dp.toPx(),
+                    center = center,
+                    style = Stroke(width = 1.2f)
+                )
+            }
+
+            // 8. 3D Orbiting Telemetry Particles
+            val particleCount = 20
+            for (pIdx in 0 until particleCount) {
+                val pAngle = Math.toRadians((pIdx * (360.0 / particleCount) + outerRotation * 0.8).toDouble())
+                val pInclination = Math.toRadians(35.0).toFloat()
+                val pRadius = baseRadius * 0.75f
+                val px3d = (cos(pAngle) * pRadius).toFloat()
+                val py3d = (sin(pAngle) * pRadius * cos(pInclination)).toFloat()
+                val pz3d = (sin(pAngle) * pRadius * sin(pInclination)).toFloat()
+
+                val pScale = 300f / (300f + pz3d + 60f)
+                val pAlpha = ((pz3d + 80f) / 160f).coerceIn(0.20f, 0.95f)
+                drawCircle(
+                    color = if (pz3d > 20f) Color.White.copy(alpha = pAlpha) else primaryColor.copy(alpha = pAlpha),
+                    radius = (1.8f * pScale) + (rmsLevel * 1.5f),
+                    center = Offset(center.x + px3d * pScale, center.y + py3d * pScale)
+                )
+            }
+
+            // 9. Inner Dark Glass Reactor Disc
             val innerDiscRadius = middleRingRadius - 5.dp.toPx()
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
                         coreBg.copy(alpha = 0.95f),
                         coreBg.copy(alpha = 0.98f),
-                        cyanPrimary.copy(alpha = 0.75f)
+                        primaryColor.copy(alpha = 0.80f)
                     ),
                     center = center,
                     radius = innerDiscRadius
@@ -845,14 +1011,51 @@ fun JarvisHudVisualizer(
                 center = center
             )
             drawCircle(
-                color = cyanPrimary.copy(alpha = 0.85f),
+                color = primaryColor.copy(alpha = 0.85f),
                 radius = innerDiscRadius,
                 center = center,
                 style = Stroke(width = 1.8f)
             )
+
+            // 10. State-Specific Overlays (Screen Vision Scan / Mute Cross / Error Flare)
+            when (state) {
+                AssistantState.SCREEN_SHARING -> {
+                    // Sweeping horizontal radar scanline
+                    val scanY = center.y + ((energyWavePhase * innerDiscRadius * 2f) - innerDiscRadius)
+                    val halfChord = sqrt((innerDiscRadius * innerDiscRadius - (scanY - center.y) * (scanY - center.y)).coerceAtLeast(0f))
+                    if (halfChord > 0) {
+                        drawLine(
+                            color = Color(0xFF00FFFF).copy(alpha = 0.90f),
+                            start = Offset(center.x - halfChord, scanY),
+                            end = Offset(center.x + halfChord, scanY),
+                            strokeWidth = 2.6f,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+                AssistantState.MUTED -> {
+                    // Muted diagonal strike-through line across inner disc
+                    drawLine(
+                        color = Color(0xFFFF9900).copy(alpha = 0.90f),
+                        start = Offset(center.x - 22.dp.toPx(), center.y + 22.dp.toPx()),
+                        end = Offset(center.x + 22.dp.toPx(), center.y - 22.dp.toPx()),
+                        strokeWidth = 2.4f,
+                        cap = StrokeCap.Round
+                    )
+                }
+                AssistantState.FAILED -> {
+                    // Controlled warning flare
+                    drawCircle(
+                        color = Color(0xFFFF3344).copy(alpha = 0.40f * breathingPulse),
+                        radius = innerDiscRadius * 0.9f,
+                        center = center
+                    )
+                }
+                else -> {}
+            }
         }
 
-        // 7. Central "MAX" title in clean, high-tech glowing typography
+        // 11. Central "MAX" title in clean, high-tech glowing typography
         Text(
             text = "MAX",
             color = Color.White,

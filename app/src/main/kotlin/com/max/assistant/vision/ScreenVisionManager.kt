@@ -10,8 +10,12 @@ import android.media.projection.MediaProjection
 import android.util.Base64
 import android.util.Log
 import com.max.assistant.ai.IAiProvider
+import com.max.assistant.hud.ScreenVisionUiState
 import com.max.assistant.tts.VoiceLanguage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.Locale
@@ -38,6 +42,9 @@ class ScreenVisionManager(
         private set
 
     val hasActiveProjection: Boolean get() = mediaProjection != null
+
+    private val _screenVisionUiState = MutableStateFlow(ScreenVisionUiState())
+    val screenVisionUiState: StateFlow<ScreenVisionUiState> = _screenVisionUiState.asStateFlow()
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -136,25 +143,84 @@ class ScreenVisionManager(
         prompt: String,
         language: VoiceLanguage = VoiceLanguage.HINGLISH
     ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-        // 1. Strict Gallery and Financial App Protection Interception
+        // 1. Identify package and app name
         val rootNode = accessibilityController.getRootNode()
         val pkg = rootNode?.packageName?.toString() ?: ""
+        val appName = getFriendlyAppName(pkg)
+
+        val interactiveElements = try {
+            accessibilityController.findInteractiveElements().mapNotNull { el ->
+                val txt = el.text.ifBlank { el.contentDescription.ifBlank { el.viewId ?: "" } }.trim()
+                if (txt.isNotBlank() && txt.length < 40) txt else null
+            }.distinct().take(6)
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        _screenVisionUiState.value = ScreenVisionUiState(
+            isActive = true,
+            captureStatus = "Analyzing Display...",
+            appName = appName,
+            extractedTextSummary = "",
+            identifiedElementsCount = interactiveElements.size,
+            identifiedElements = interactiveElements,
+            maxInterpretation = "Processing visible screen elements and visual layout, Sir...",
+            suggestedActions = listOf("Explain Error", "Scroll Down", "Take Action")
+        )
+
+        // 2. Strict Gallery and Financial App Protection Interception
         if (com.max.assistant.protection.GalleryProtectionManager.isGalleryPackage(pkg)) {
             val blockMsg = "Sorry, I don't have permission to access your Gallery."
+            _screenVisionUiState.value = ScreenVisionUiState(
+                isActive = false,
+                captureStatus = "Privacy Protected",
+                appName = appName,
+                maxInterpretation = blockMsg
+            )
             return@withContext Pair(false, blockMsg)
         }
         if (com.max.assistant.protection.PaymentProtectionManager.isPaymentPackage(pkg)) {
             val blockMsg = "Sir, for your financial security and privacy, screen vision is restricted on banking and payment applications."
+            _screenVisionUiState.value = ScreenVisionUiState(
+                isActive = false,
+                captureStatus = "Financial Shield Active",
+                appName = appName,
+                maxInterpretation = blockMsg
+            )
             return@withContext Pair(false, blockMsg)
         }
 
-        // 2. Extract visible text from active UI hierarchy
+        // 3. Extract visible text from active UI hierarchy
         val visibleText = accessibilityController.extractVisibleText()
 
-        // 3. Acquire current frame via MediaProjection or AccessibilityService
+        // 4. Acquire current frame via MediaProjection or AccessibilityService
         val bitmap = acquireBitmap()
 
-        // 4. Try Gemini Multimodal AI Vision if bitmap and provider are available
+        // Helper to update state on successful explanation
+        fun updateSuccessUiState(explanation: String) {
+            val dynamicSuggestions = mutableListOf<String>()
+            if (interactiveElements.isNotEmpty()) {
+                dynamicSuggestions.add("Click ${interactiveElements.first()}")
+            }
+            if (visibleText.contains("error", ignoreCase = true) || visibleText.contains("failed", ignoreCase = true)) {
+                dynamicSuggestions.add("Explain Error")
+            }
+            dynamicSuggestions.add("Scroll Down")
+            dynamicSuggestions.add("Close Vision")
+
+            _screenVisionUiState.value = ScreenVisionUiState(
+                isActive = true,
+                captureStatus = "Screen Vision Active",
+                appName = appName,
+                extractedTextSummary = visibleText.take(240).replace("\n", " ").trim(),
+                identifiedElementsCount = interactiveElements.size,
+                identifiedElements = interactiveElements,
+                maxInterpretation = explanation,
+                suggestedActions = dynamicSuggestions.distinct().take(4)
+            )
+        }
+
+        // 5. Try Gemini Multimodal AI Vision if bitmap and provider are available
         if (bitmap != null) {
             val ai = aiProvider
             if (ai != null && ai.isConfigured) {
@@ -177,6 +243,7 @@ class ScreenVisionManager(
                     val result = ai.analyzeImage(base64, contextEnrichedPrompt, language)
                     if (result is com.max.assistant.ai.AiResponse.Success && result.text.isNotBlank()) {
                         screenContextManager.updateScreenContext(result.text, visibleText, bitmap)
+                        updateSuccessUiState(result.text)
                         return@withContext Pair(true, result.text)
                     } else if (result is com.max.assistant.ai.AiResponse.Error) {
                         Log.w(TAG, "Gemini Vision returned error: ${result.message}. Falling back to local screen vision.")
@@ -187,14 +254,15 @@ class ScreenVisionManager(
             }
         }
 
-        // 5. Intelligent Local Screen Vision Engine (Offline / Instant fallback)
+        // 6. Intelligent Local Screen Vision Engine (Offline / Instant fallback)
         if (visibleText.isNotBlank() || pkg.isNotBlank()) {
             val localExplanation = generateLocalScreenExplanation(pkg, visibleText, prompt, language)
             screenContextManager.updateScreenContext(localExplanation, visibleText, bitmap)
+            updateSuccessUiState(localExplanation)
             return@withContext Pair(true, localExplanation)
         }
 
-        // 6. If both screenshot and accessibility text failed
+        // 7. If both screenshot and accessibility text failed
         if (mediaProjection == null && !accessibilityController.isServiceActive) {
             val reqMsg = when (language) {
                 VoiceLanguage.HINGLISH -> "Sir, screen dekhne ke liye Accessibility permission enable karni hogi. Settings open kar raha hoon, wahan MAX Assistant ko turn on karein."
@@ -202,6 +270,12 @@ class ScreenVisionManager(
                 VoiceLanguage.BENGALI -> "স্যার, স্ক্রিন দেখার জন্য অ্যাক্সেসিবিলিটি পারমিশন চালু করুন। আমি সেটিংস খুলছি।"
                 else -> "Sir, screen vision requires Accessibility permission. Opening Accessibility settings for you now."
             }
+            _screenVisionUiState.value = ScreenVisionUiState(
+                isActive = false,
+                captureStatus = "Permission Required",
+                appName = appName,
+                maxInterpretation = reqMsg
+            )
             return@withContext Pair(false, reqMsg)
         }
 
@@ -211,6 +285,12 @@ class ScreenVisionManager(
             VoiceLanguage.BENGALI -> "স্যার, স্ক্রিন ফ্রেম ক্যাপচার করা সম্ভব হয়নি। অনুগ্রহ করে আবার চেষ্টা করুন।"
             else -> "Sir, failed to acquire the current display frame. Please try again."
         }
+        _screenVisionUiState.value = ScreenVisionUiState(
+            isActive = false,
+            captureStatus = "Capture Inactive",
+            appName = appName,
+            maxInterpretation = failMsg
+        )
         return@withContext Pair(false, failMsg)
     }
 
@@ -365,6 +445,12 @@ class ScreenVisionManager(
 
     fun cleanupResources() {
         isLiveVisionActive = false
+        _screenVisionUiState.value = ScreenVisionUiState(
+            isActive = false,
+            captureStatus = "Standby",
+            appName = "Home Screen",
+            maxInterpretation = "Screen vision is in standby. Ask 'MAX, what is on my screen?'"
+        )
         try {
             virtualDisplay?.release()
             virtualDisplay = null

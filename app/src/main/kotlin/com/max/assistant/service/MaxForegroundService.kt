@@ -21,6 +21,12 @@ import com.max.assistant.launcher.LaunchResult
 import com.max.assistant.planner.MultiStepPlan
 import com.max.assistant.planner.TaskPlanner
 import com.max.assistant.protection.PaymentProtectionManager
+import com.max.assistant.hud.ActivityCategory
+import com.max.assistant.hud.ActivityEvent
+import com.max.assistant.hud.ActiveTaskState
+import com.max.assistant.hud.EventStatus
+import com.max.assistant.hud.ScreenVisionUiState
+import com.max.assistant.hud.SystemTelemetryInfo
 import com.max.assistant.speech.MaxSpeechManager
 import com.max.assistant.telephony.PhoneActionResult
 import com.max.assistant.telephony.PhoneCommunicationManager
@@ -158,6 +164,119 @@ class MaxForegroundService : Service() {
     private val _logs = MutableStateFlow<List<String>>(emptyList())
     val logs: StateFlow<List<String>> = _logs.asStateFlow()
 
+    private val _activityEvents = MutableStateFlow<List<ActivityEvent>>(emptyList())
+    val activityEvents: StateFlow<List<ActivityEvent>> = _activityEvents.asStateFlow()
+
+    private val _activeTaskState = MutableStateFlow<ActiveTaskState?>(null)
+    val activeTaskState: StateFlow<ActiveTaskState?> = _activeTaskState.asStateFlow()
+
+    private val _systemTelemetry = MutableStateFlow(SystemTelemetryInfo())
+    val systemTelemetry: StateFlow<SystemTelemetryInfo> = _systemTelemetry.asStateFlow()
+
+    val screenVisionUiState: StateFlow<ScreenVisionUiState>
+        get() = if (::screenVisionManager.isInitialized) screenVisionManager.screenVisionUiState else MutableStateFlow(ScreenVisionUiState()).asStateFlow()
+
+    fun publishActivityEvent(
+        title: String,
+        detail: String = "",
+        category: ActivityCategory = ActivityCategory.SYSTEM,
+        status: EventStatus = EventStatus.SUCCESS
+    ) {
+        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val event = ActivityEvent(
+            timestamp = time,
+            title = title,
+            detail = detail,
+            category = category,
+            status = status
+        )
+        val current = _activityEvents.value.toMutableList()
+        current.add(0, event)
+        if (current.size > 80) current.removeAt(current.size - 1)
+        _activityEvents.value = current
+        addLog("[$category] $title ${if (detail.isNotBlank()) "— $detail" else ""}")
+    }
+
+    fun updateActiveTask(
+        name: String,
+        command: String,
+        reasoning: String,
+        targetApp: String? = null,
+        step: String,
+        progress: Int? = null,
+        tool: String? = null,
+        isCancellable: Boolean = true
+    ) {
+        _activeTaskState.value = ActiveTaskState(
+            taskName = name,
+            recognizedCommand = command,
+            reasoningSummary = reasoning,
+            targetApp = targetApp,
+            currentStep = step,
+            progressPercent = progress,
+            toolUsed = tool,
+            isCancellable = isCancellable
+        )
+    }
+
+    fun clearActiveTask() {
+        _activeTaskState.value = null
+    }
+
+    fun cancelCurrentTask() {
+        val active = _activeTaskState.value
+        if (active != null) {
+            publishActivityEvent(
+                title = "Task Cancelled by Sir",
+                detail = active.taskName,
+                category = ActivityCategory.EXECUTION,
+                status = EventStatus.WARNING
+            )
+            clearActiveTask()
+            speechManager.setAssistantState(com.max.assistant.speech.AssistantState.IDLE)
+            val cancelMsg = when (voiceEngine.settings.value.outputLanguage) {
+                VoiceLanguage.HINDI -> "जी सर, टास्क रद्द कर दिया गया है।"
+                VoiceLanguage.BENGALI -> "হ্যাঁ স্যার, কাজটি বাতিল করা হয়েছে।"
+                else -> "Task cancelled as requested, Sir."
+            }
+            speakWithCoordination(cancelMsg, voiceEngine.settings.value.outputLanguage)
+        }
+    }
+
+    private fun startTelemetryPolling() {
+        serviceScope.launch {
+            while (isActive) {
+                try {
+                    val (batteryLvl, isCharging) = systemStatusManager.getBatteryStatus()
+                    val netStatus = systemStatusManager.getNetworkStatus()
+                    val isOnline = netStatus != "Disconnected" && netStatus != "Unknown"
+                    val isBtOn = try {
+                        val bm = getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+                        bm?.adapter?.isEnabled == true
+                    } catch (_: Exception) { false }
+                    val timeStr = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date())
+                    val aiStatus = if (::aiBrain.isInitialized && aiBrain.aiProvider?.isConfigured == true) "Gemini Neural Engine Connected" else "Local Neural Engine"
+
+                    _systemTelemetry.value = SystemTelemetryInfo(
+                        batteryPercent = if (batteryLvl >= 0) batteryLvl else 100,
+                        isCharging = isCharging,
+                        networkType = netStatus,
+                        isOnline = isOnline,
+                        bluetoothEnabled = isBtOn,
+                        micActive = !voiceEngine.isMuted.value && speechManager.assistantState.value != com.max.assistant.speech.AssistantState.MUTED,
+                        serviceRunning = true,
+                        aiProviderStatus = aiStatus,
+                        currentTime = timeStr,
+                        appVersion = "v2.1.0"
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Telemetry update error: ${e.message}")
+                }
+                delay(5000L)
+            }
+        }
+    }
+
     private val _showPinDialog = MutableStateFlow(false)
     val showPinDialog: StateFlow<Boolean> = _showPinDialog.asStateFlow()
 
@@ -214,6 +333,8 @@ class MaxForegroundService : Service() {
             onCommandReceived = { command -> handleIncomingCommand(command) },
             onWakeWordDetected = {
                 addLog("Wake word detected! Listening, Sir.")
+                publishActivityEvent("Wake Word Detected", "Awakened by voice trigger, Sir", ActivityCategory.VOICE)
+                publishActivityEvent("Listening to Sir", "Microphone actively recording command", ActivityCategory.VOICE)
                 val currentLang = voiceEngine.settings.value.outputLanguage
                 val ack = when (currentLang) {
                     VoiceLanguage.BENGALI -> "হ্যাঁ স্যার?"
@@ -271,6 +392,7 @@ class MaxForegroundService : Service() {
         }
 
         startAutoUpdateLoop()
+        startTelemetryPolling()
         Log.i(TAG, "MaxForegroundService created.")
     }
 
@@ -358,6 +480,9 @@ class MaxForegroundService : Service() {
 
     fun handleIncomingCommand(command: String) {
         addLog("Received Command: $command")
+        publishActivityEvent("Voice Command Recognized", command, ActivityCategory.VOICE)
+        publishActivityEvent("Understanding Request", "Formulating optimal execution plan", ActivityCategory.REASONING)
+        updateActiveTask("Executing Command", command, "Analyzing intent and executing verified action", null, "Evaluating command", 25, "Neural Brain")
         val currentOutputLang = voiceEngine.settings.value.outputLanguage
         conversationRepo.addMessage(com.max.assistant.ai.MessageRole.USER, command)
 
@@ -917,13 +1042,16 @@ class MaxForegroundService : Service() {
                     } catch (_: Exception) {}
                     MainActivity.activeInstance?.requestScreenCaptureConsent()
                 } else {
-                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.THINKING)
+                    speechManager.setAssistantState(com.max.assistant.speech.AssistantState.SCREEN_SHARING)
+                    publishActivityEvent("Screen Vision Activated", "Scanning authorized display frame", ActivityCategory.VISION)
+                    updateActiveTask("Screen Vision Analysis", decision.prompt, "Analyzing visible UI elements and text", null, "Processing display frame", 60, "Gemini Multimodal Vision")
                     serviceScope.launch {
                         val (success, answer) = screenVisionManager.analyzeScreenSnapshot(decision.prompt, decision.language)
                         speechManager.setAssistantState(if (success) com.max.assistant.speech.AssistantState.COMPLETED else com.max.assistant.speech.AssistantState.FAILED)
                         speakWithCoordination(answer, decision.language)
                         conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, answer, decision.language)
-                        addLog("Screen Vision analysis: success=$success")
+                        publishActivityEvent(if (success) "Screen Analysis Complete" else "Screen Analysis Notice", answer.take(80), ActivityCategory.VISION, if (success) EventStatus.SUCCESS else EventStatus.WARNING)
+                        clearActiveTask()
                     }
                 }
             }
@@ -1344,19 +1472,22 @@ class MaxForegroundService : Service() {
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.COMPLETED)
                 speakWithCoordination(res.message, lang)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, res.message, lang)
-                addLog("${res.actionType}: ${res.message}")
+                publishActivityEvent("Execution Succeeded", "${res.actionType}: ${res.message}", ActivityCategory.EXECUTION, EventStatus.SUCCESS)
+                clearActiveTask()
             }
             is com.max.assistant.executor.CommandExecutionResult.Blocked -> {
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.FAILED)
                 speakWithCoordination(res.reason, lang)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, res.reason, lang)
-                addLog("BLOCKED: ${res.reason}")
+                publishActivityEvent("Action Blocked / Security Shield", res.reason, ActivityCategory.SECURITY, EventStatus.WARNING)
+                clearActiveTask()
             }
             is com.max.assistant.executor.CommandExecutionResult.Failed -> {
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.FAILED)
                 speakWithCoordination(res.error, lang)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, res.error, lang)
-                addLog("FAILED: ${res.error}")
+                publishActivityEvent("Execution Failed", res.error, ActivityCategory.EXECUTION, EventStatus.ERROR)
+                clearActiveTask()
             }
             is com.max.assistant.executor.CommandExecutionResult.RequiresConfirmation -> {
                 speechManager.setAwaitingCommand(true)
