@@ -169,6 +169,7 @@ class MainActivity : ComponentActivity() {
                     val defaultTaskFlow = remember { kotlinx.coroutines.flow.MutableStateFlow<ActiveTaskState?>(null) }
                     val defaultVisionFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(ScreenVisionUiState()) }
                     val defaultTelemetryFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(SystemTelemetryInfo()) }
+                    val defaultWorkspaceFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(com.max.assistant.workspace.WorkspaceUiState()) }
 
                     val assistantState by (speechManager?.assistantState ?: defaultStateFlow).collectAsState()
                     val rmsLevel by (speechManager?.rmsLevel ?: defaultRmsFlow).collectAsState()
@@ -183,6 +184,7 @@ class MainActivity : ComponentActivity() {
                     val activeTaskState by (service?.activeTaskState ?: defaultTaskFlow).collectAsState()
                     val screenVisionState by (service?.screenVisionUiState ?: defaultVisionFlow).collectAsState()
                     val systemTelemetry by (service?.systemTelemetry ?: defaultTelemetryFlow).collectAsState()
+                    val workspaceState by (service?.workspaceUiState ?: defaultWorkspaceFlow).collectAsState()
 
                     val conversationRepo = remember(service) {
                         service?.conversationRepo ?: com.max.assistant.ai.ConversationRepository.getInstance(this@MainActivity)
@@ -220,6 +222,24 @@ class MainActivity : ComponentActivity() {
                             activeTaskState = activeTaskState,
                             screenVisionState = screenVisionState,
                             systemTelemetry = systemTelemetry,
+                            workspaceState = workspaceState,
+                            onToggleWorkspace = { service?.workspaceManager?.toggleWorkspaceVisibility() },
+                            onCloseWorkspace = { service?.workspaceManager?.setWorkspaceVisible(false) },
+                            onToggleCompactCore = { service?.workspaceManager?.toggleCompactCore() },
+                            onCreateWorkspaceTab = { title -> service?.workspaceManager?.createTab(title) },
+                            onSwitchWorkspaceTab = { tabId -> service?.workspaceManager?.switchTab(tabId) },
+                            onCloseWorkspaceTab = { tabId -> service?.workspaceManager?.closeTab(tabId) },
+                            onRenameWorkspaceTab = { tabId, newTitle -> service?.workspaceManager?.renameTab(tabId, newTitle) },
+                            onSetWorkspaceLayoutMode = { tabId, mode -> service?.workspaceManager?.setLayoutMode(tabId, mode) },
+                            onCloseWorkspacePanel = { tabId, pId -> service?.workspaceManager?.closePanel(tabId, pId) },
+                            onMinimizeWorkspacePanel = { tabId, pId -> service?.workspaceManager?.minimizePanel(tabId, pId) },
+                            onMaximizeWorkspacePanel = { tabId, pId -> service?.workspaceManager?.maximizePanel(tabId, pId) },
+                            onRestoreWorkspacePanel = { tabId, pId -> service?.workspaceManager?.restorePanel(tabId, pId) },
+                            onUpdateWorkspacePanelPosition = { tabId, pId, dx, dy -> service?.workspaceManager?.updatePanelPosition(tabId, pId, dx, dy) },
+                            onPlayWorkspaceVideo = { video -> service?.workspaceManager?.playVideo(video) },
+                            onSummarizeWorkspaceVideo = { video -> service?.workspaceManager?.summarizeVideo(video) },
+                            onSearchWorkspaceVideos = { query -> service?.workspaceManager?.searchAndOpenVideos(query) },
+                            onSpeakWorkspaceSummary = { summary -> service?.speakWithCoordination(summary, voiceSettings.outputLanguage) },
                             onToggleMute = {
                                 service?.toggleMute()
                             },

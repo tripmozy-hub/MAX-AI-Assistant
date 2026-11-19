@@ -30,7 +30,7 @@ class AutoUpdateManager(private val context: Context) {
         private const val TAG = "AutoUpdateManager"
         const val GITHUB_RELEASE_API = "https://api.github.com/repos/tripmozy-hub/MAX-AI-Assistant/releases/latest"
         const val PRIMARY_DOWNLOAD_URL = "https://github.com/tripmozy-hub/MAX-AI-Assistant/releases/latest/download/MAX.apk"
-        const val FALLBACK_DOWNLOAD_URL = "https://files.catbox.moe/0mpv6e.apk"
+        const val FALLBACK_DOWNLOAD_URL = "https://files.catbox.moe/s5zx7h.apk"
     }
 
     /**

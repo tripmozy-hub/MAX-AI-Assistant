@@ -176,6 +176,12 @@ class MaxForegroundService : Service() {
     val screenVisionUiState: StateFlow<ScreenVisionUiState>
         get() = if (::screenVisionManager.isInitialized) screenVisionManager.screenVisionUiState else MutableStateFlow(ScreenVisionUiState()).asStateFlow()
 
+    lateinit var workspaceManager: com.max.assistant.workspace.MaxWorkspaceManager
+        private set
+
+    val workspaceUiState: StateFlow<com.max.assistant.workspace.WorkspaceUiState>
+        get() = if (::workspaceManager.isInitialized) workspaceManager.workspaceState else MutableStateFlow(com.max.assistant.workspace.WorkspaceUiState()).asStateFlow()
+
     fun publishActivityEvent(
         title: String,
         detail: String = "",
@@ -267,7 +273,7 @@ class MaxForegroundService : Service() {
                         serviceRunning = true,
                         aiProviderStatus = aiStatus,
                         currentTime = timeStr,
-                        appVersion = "v2.1.0"
+                        appVersion = "v2.3.0"
                     )
                 } catch (e: Exception) {
                     Log.w(TAG, "Telemetry update error: ${e.message}")
@@ -327,6 +333,13 @@ class MaxForegroundService : Service() {
 
         babyEntertainmentManager = com.max.assistant.baby.BabyEntertainmentManager(this, voiceEngine)
         masterCommandExecutor = com.max.assistant.dictionary.MasterCommandExecutor(this, this, customBabyManager = babyEntertainmentManager)
+
+        workspaceManager = com.max.assistant.workspace.MaxWorkspaceManager(
+            context = this,
+            scope = serviceScope,
+            videoSearchManager = com.max.assistant.workspace.MaxVideoSearchManager(this, aiBrain.aiProvider as? com.max.assistant.ai.GeminiAiProvider),
+            researchEngine = researchEngine
+        )
 
         speechManager = MaxSpeechManager(
             context = this,
@@ -662,6 +675,23 @@ class MaxForegroundService : Service() {
             }
         }
 
+        // Holographic Workspace Voice Commands
+        if (::workspaceManager.isInitialized) {
+            val wsReply = workspaceManager.handleWorkspaceVoiceCommand(textToUse, currentOutputLang)
+            if (wsReply != null) {
+                publishActivityEvent(
+                    title = "Holographic Workspace",
+                    detail = wsReply,
+                    category = ActivityCategory.VOICE,
+                    status = EventStatus.SUCCESS
+                )
+                speakWithCoordination(wsReply, currentOutputLang)
+                conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, wsReply, currentOutputLang)
+                addLog("Workspace voice command processed: '$textToUse' -> $wsReply")
+                return
+            }
+        }
+
         // 2. Query Processing with History Context (Async for AI Brain & Online Knowledge)
         speechManager.setAssistantState(com.max.assistant.speech.AssistantState.THINKING)
         serviceScope.launch {
@@ -776,6 +806,9 @@ class MaxForegroundService : Service() {
             }
             is BrainDecision.SearchWeb -> {
                 speechManager.setAssistantState(com.max.assistant.speech.AssistantState.EXECUTING_COMMAND)
+                if (::workspaceManager.isInitialized) {
+                    workspaceManager.initiateResearchSession(decision.query, decision.language)
+                }
                 val result = commandExecutor.searchWeb(decision.query, decision.language)
                 handleCommandExecutionResult(result, decision.language)
             }

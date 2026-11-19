@@ -58,6 +58,7 @@ import com.max.assistant.speech.AssistantState
 import com.max.assistant.tts.VoiceLanguage
 import com.max.assistant.tts.VoiceSettings
 import com.max.assistant.ui.settings.VoiceSettingsDialog
+import com.max.assistant.workspace.*
 
 /**
  * Modern, Simple, Attractive, and Smooth AI Assistant Dashboard.
@@ -80,6 +81,24 @@ fun FuturisticDashboard(
     activeTaskState: ActiveTaskState? = null,
     screenVisionState: ScreenVisionUiState = ScreenVisionUiState(),
     systemTelemetry: SystemTelemetryInfo = SystemTelemetryInfo(),
+    workspaceState: WorkspaceUiState = WorkspaceUiState(),
+    onToggleWorkspace: () -> Unit = {},
+    onCloseWorkspace: () -> Unit = {},
+    onToggleCompactCore: () -> Unit = {},
+    onCreateWorkspaceTab: (String) -> Unit = {},
+    onSwitchWorkspaceTab: (String) -> Unit = {},
+    onCloseWorkspaceTab: (String) -> Unit = {},
+    onRenameWorkspaceTab: (String, String) -> Unit = { _, _ -> },
+    onSetWorkspaceLayoutMode: (String, WorkspaceLayoutMode) -> Unit = { _, _ -> },
+    onCloseWorkspacePanel: (String, String) -> Unit = { _, _ -> },
+    onMinimizeWorkspacePanel: (String, String) -> Unit = { _, _ -> },
+    onMaximizeWorkspacePanel: (String, String) -> Unit = { _, _ -> },
+    onRestoreWorkspacePanel: (String, String) -> Unit = { _, _ -> },
+    onUpdateWorkspacePanelPosition: (String, String, Float, Float) -> Unit = { _, _, _, _ -> },
+    onPlayWorkspaceVideo: (VideoItem) -> Unit = {},
+    onSummarizeWorkspaceVideo: (VideoItem) -> Unit = {},
+    onSearchWorkspaceVideos: (String) -> Unit = {},
+    onSpeakWorkspaceSummary: (String) -> Unit = {},
     onToggleMute: () -> Unit,
     onStopMax: () -> Unit,
     onVerifyPin: (String) -> Unit,
@@ -275,6 +294,23 @@ fun FuturisticDashboard(
                             imageVector = Icons.Default.Sync,
                             contentDescription = "Switch Visualizer Face",
                             tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Holographic Multi-Window Workspace Button
+                    IconButton(
+                        onClick = onToggleWorkspace,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(if (workspaceState.isVisible) Color(0xFF00E5FF).copy(alpha = 0.25f) else Color(0xFF131A26).copy(alpha = 0.85f))
+                            .border(1.dp, if (workspaceState.isVisible) Color(0xFF00E5FF) else Color.White.copy(alpha = 0.08f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Holographic Workspace",
+                            tint = if (workspaceState.isVisible) Color(0xFF00E5FF) else Color(0xFF94A3B8),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -1115,6 +1151,33 @@ fun FuturisticDashboard(
                     }
                 }
             }
+        }
+
+        // 10. Holographic Multi-Window Workspace Overlay
+        AnimatedVisibility(
+            visible = workspaceState.isVisible,
+            enter = fadeIn(tween(300)) + slideInVertically(tween(350)) { it / 4 },
+            exit = fadeOut(tween(250)) + slideOutVertically(tween(300)) { it / 4 }
+        ) {
+            com.max.assistant.workspace.HolographicWorkspaceView(
+                workspaceState = workspaceState,
+                onCloseWorkspace = onCloseWorkspace,
+                onToggleCompactCore = onToggleCompactCore,
+                onCreateTab = onCreateWorkspaceTab,
+                onSwitchTab = onSwitchWorkspaceTab,
+                onCloseTab = onCloseWorkspaceTab,
+                onRenameTab = onRenameWorkspaceTab,
+                onSetLayoutMode = onSetWorkspaceLayoutMode,
+                onClosePanel = onCloseWorkspacePanel,
+                onMinimizePanel = onMinimizeWorkspacePanel,
+                onMaximizePanel = onMaximizeWorkspacePanel,
+                onRestorePanel = onRestoreWorkspacePanel,
+                onUpdatePosition = onUpdateWorkspacePanelPosition,
+                onPlayVideo = onPlayWorkspaceVideo,
+                onSummarizeVideo = onSummarizeWorkspaceVideo,
+                onSearchVideos = onSearchWorkspaceVideos,
+                onSpeakSummary = onSpeakWorkspaceSummary
+            )
         }
     }
 }
