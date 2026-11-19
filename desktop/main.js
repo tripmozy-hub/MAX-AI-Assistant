@@ -187,6 +187,24 @@ app.get('/api/automation/health', async (req, res) => {
   res.json(result);
 });
 
+app.post('/api/voice/tts', async (req, res) => {
+  try {
+    const backendRes = await fetch(`${BACKEND_HTTP_URL}/api/voice/fish-tts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    if (!backendRes.ok) {
+      return res.status(backendRes.status).send(await backendRes.text());
+    }
+    const buffer = await backendRes.arrayBuffer();
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // =========================================================================
 // 3. Central Ecosystem WebSocket Bridge
 // =========================================================================

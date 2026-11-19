@@ -34,8 +34,11 @@ data class VoiceSettings(
     val allowShortWakeWord: Boolean = true,        // Prefer "MAX" and common matching variants by default
     val continuousListening: Boolean = true,
     val muteListeningBeep: Boolean = true,
-    val currentVoiceName: String = "JARVIS Hinglish Voice Matrix",
-    val engineStatusMessage: String = "JARVIS Hinglish Voice System Active"
+    val currentVoiceName: String = "JARVIS Neural Cloud Matrix",
+    val engineStatusMessage: String = "Fish Audio JARVIS Voice Active",
+    val useNeuralCloudVoice: Boolean = true,
+    val fishAudioApiKey: String = FishAudioService.DEFAULT_FISH_API_KEY,
+    val fishAudioVoiceId: String = FishAudioService.DEFAULT_JARVIS_VOICE_ID
 ) {
     companion object {
         private const val PREFS = "max_voice_settings"
@@ -47,12 +50,15 @@ data class VoiceSettings(
         private const val KEY_ALLOW_SHORT_WAKE = "allow_short_wake_word"
         private const val KEY_CONTINUOUS = "continuous_listening"
         private const val KEY_MUTE_BEEP = "mute_listening_beep"
-        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v6_hinglish"
+        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v7_fish"
+        private const val KEY_USE_CLOUD_VOICE = "use_neural_cloud_voice"
+        private const val KEY_FISH_API_KEY = "fish_audio_api_key"
+        private const val KEY_FISH_VOICE_ID = "fish_audio_voice_id"
 
         fun load(context: Context): VoiceSettings {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-            // Auto-upgrade to JARVIS Hinglish voice if not yet migrated to v6
+            // Auto-upgrade to JARVIS Fish Audio neural voice if not yet migrated to v7
             val isMigrated = p.getBoolean(KEY_JARVIS_VOICE_VER, false)
             if (!isMigrated) {
                 p.edit()
@@ -61,12 +67,18 @@ data class VoiceSettings(
                     .putString(KEY_OUTPUT_LANG, VoiceLanguage.HINGLISH.name)
                     .putFloat(KEY_PITCH, 0.82f)
                     .putFloat(KEY_SPEED, 0.94f)
+                    .putBoolean(KEY_USE_CLOUD_VOICE, true)
+                    .putString(KEY_FISH_API_KEY, FishAudioService.DEFAULT_FISH_API_KEY)
+                    .putString(KEY_FISH_VOICE_ID, FishAudioService.DEFAULT_JARVIS_VOICE_ID)
                     .apply()
                 return VoiceSettings(
                     inputLanguage = VoiceLanguage.HINGLISH,
                     outputLanguage = VoiceLanguage.HINGLISH,
                     pitch = 0.82f,
-                    speed = 0.94f
+                    speed = 0.94f,
+                    useNeuralCloudVoice = true,
+                    fishAudioApiKey = FishAudioService.DEFAULT_FISH_API_KEY,
+                    fishAudioVoiceId = FishAudioService.DEFAULT_JARVIS_VOICE_ID
                 )
             }
 
@@ -78,6 +90,9 @@ data class VoiceSettings(
             val shortWake = p.getBoolean(KEY_ALLOW_SHORT_WAKE, true)
             val continuous = p.getBoolean(KEY_CONTINUOUS, true)
             val muteBeep = p.getBoolean(KEY_MUTE_BEEP, true)
+            val useCloud = p.getBoolean(KEY_USE_CLOUD_VOICE, true)
+            val fishKey = p.getString(KEY_FISH_API_KEY, FishAudioService.DEFAULT_FISH_API_KEY) ?: FishAudioService.DEFAULT_FISH_API_KEY
+            val fishVoice = p.getString(KEY_FISH_VOICE_ID, FishAudioService.DEFAULT_JARVIS_VOICE_ID) ?: FishAudioService.DEFAULT_JARVIS_VOICE_ID
 
             return VoiceSettings(
                 inputLanguage = inLang,
@@ -87,7 +102,10 @@ data class VoiceSettings(
                 wakeWordEnabled = wake,
                 allowShortWakeWord = shortWake,
                 continuousListening = continuous,
-                muteListeningBeep = muteBeep
+                muteListeningBeep = muteBeep,
+                useNeuralCloudVoice = useCloud,
+                fishAudioApiKey = fishKey,
+                fishAudioVoiceId = fishVoice
             )
         }
     }
@@ -103,6 +121,9 @@ data class VoiceSettings(
             .putBoolean(KEY_ALLOW_SHORT_WAKE, allowShortWakeWord)
             .putBoolean(KEY_CONTINUOUS, continuousListening)
             .putBoolean(KEY_MUTE_BEEP, muteListeningBeep)
+            .putBoolean(KEY_USE_CLOUD_VOICE, useNeuralCloudVoice)
+            .putString(KEY_FISH_API_KEY, fishAudioApiKey)
+            .putString(KEY_FISH_VOICE_ID, fishAudioVoiceId)
             .apply()
     }
 }

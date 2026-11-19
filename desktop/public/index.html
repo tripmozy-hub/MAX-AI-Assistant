@@ -571,6 +571,25 @@
       logs.prepend(div);
     }
 
+    function playJarvisSpeech(text) {
+      if (!text || text.length < 2) return;
+      fetch('/api/voice/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      })
+      .then(res => {
+        if (res.ok) return res.blob();
+        throw new Error('TTS response not ok');
+      })
+      .then(blob => {
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+        audio.play().catch(e => console.warn('Audio play auto-policy:', e));
+      })
+      .catch(e => console.warn('Fish Audio TTS notice:', e.message));
+    }
+
     function appendChatMessage(msg) {
       const chat = document.getElementById('chat-messages');
       const div = document.createElement('div');
@@ -578,6 +597,9 @@
       div.innerText = msg.content;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
+      if (msg.role === 'MAX') {
+        playJarvisSpeech(msg.content);
+      }
     }
 
     function updateDevicePills(devices) {

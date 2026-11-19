@@ -172,6 +172,43 @@ app.get('/api/updates/:platform', (req, res) => {
   res.json(updateService.checkUpdate(platform, currentVersion));
 });
 
+// 10. Fish Audio Neural JARVIS TTS Endpoint
+const FISH_AUDIO_API_KEY = process.env.FISH_AUDIO_API_KEY || 'sk-fish-b06X3QPdnaWD4AV3MO9Klj0DtvYuiWnkoil-Cdv6PEM';
+const DEFAULT_JARVIS_VOICE = '14129c3e320149449d6bada6862f7338';
+
+app.post('/api/voice/fish-tts', async (req, res) => {
+  const { text, voiceId } = req.body;
+  if (!text) return res.status(400).json({ error: 'Text is required' });
+
+  try {
+    const fetchRes = await fetch('https://api.fish.audio/v1/tts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${FISH_AUDIO_API_KEY}`,
+        'Content-Type': 'application/json',
+        'model': 's2.1-pro'
+      },
+      body: JSON.stringify({
+        text,
+        reference_id: voiceId || DEFAULT_JARVIS_VOICE,
+        format: 'mp3',
+        latency: 'low'
+      })
+    });
+
+    if (!fetchRes.ok) {
+      const err = await fetchRes.text();
+      return res.status(fetchRes.status).json({ error: err });
+    }
+
+    const buffer = await fetchRes.arrayBuffer();
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.send(Buffer.from(buffer));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 

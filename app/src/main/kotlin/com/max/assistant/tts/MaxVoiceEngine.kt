@@ -11,6 +11,9 @@ import android.speech.tts.Voice
 import android.util.Log
 import com.max.assistant.audio.MaxAudioManager
 import com.max.assistant.util.LanguageDetector
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,6 +31,9 @@ class MaxVoiceEngine(
         const val DEFAULT_JARVIS_SPEED = 0.94f
         private const val GOOGLE_TTS_PACKAGE = "com.google.android.tts"
     }
+
+    private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val fishAudioService = FishAudioService(context, engineScope)
 
     private var tts: TextToSpeech? = null
     private var isReady = false
@@ -265,6 +271,45 @@ class MaxVoiceEngine(
             return
         }
 
+        val currentSettings = _settings.value
+
+        // Try Neural Cloud JARVIS Voice (Fish Audio) first if enabled & configured
+        if (currentSettings.useNeuralCloudVoice && currentSettings.fishAudioApiKey.isNotBlank()) {
+            audioManager.requestAssistantFocus()
+            unmuteForVoicePlayback()
+            _isSpeaking.value = true
+            _lastSpokenText.value = text
+
+            fishAudioService.speak(
+                text = text,
+                apiKey = currentSettings.fishAudioApiKey,
+                voiceId = currentSettings.fishAudioVoiceId,
+                onSpeechStarted = {
+                    _isSpeaking.value = true
+                    onSpeechStarted?.invoke()
+                },
+                onSpeechFinished = {
+                    _isSpeaking.value = false
+                    audioManager.releaseAssistantFocus()
+                    onSpeechFinished?.invoke()
+                },
+                onFallbackRequired = {
+                    Log.i(TAG, "Fish Audio offline or timed out: falling back to on-device Android TTS seamlessly.")
+                    speakWithAndroidTts(text, targetLanguage, onSpeechStarted, onSpeechFinished)
+                }
+            )
+            return
+        }
+
+        speakWithAndroidTts(text, targetLanguage, onSpeechStarted, onSpeechFinished)
+    }
+
+    private fun speakWithAndroidTts(
+        text: String,
+        targetLanguage: VoiceLanguage?,
+        onSpeechStarted: (() -> Unit)?,
+        onSpeechFinished: (() -> Unit)?
+    ) {
         val engine = tts
         if (!isReady || engine == null) {
             Log.w(TAG, "TTS not ready yet: $text")
@@ -329,7 +374,7 @@ class MaxVoiceEngine(
             putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC)
         }
 
-        Log.i(TAG, "Speaking aloud: '$textToSpeak'")
+        Log.i(TAG, "Speaking aloud via Android TTS: '$textToSpeak'")
         val result = engine.speak(textToSpeak, TextToSpeech.QUEUE_FLUSH, params, utteranceId)
         if (result != TextToSpeech.SUCCESS) {
             Log.e(TAG, "TextToSpeech.speak failed with code: $result")
@@ -340,6 +385,7 @@ class MaxVoiceEngine(
     }
 
     override fun stop() {
+        fishAudioService.stop()
         tts?.stop()
         muteAfterVoicePlayback()
         audioManager.releaseAssistantFocus()
@@ -426,8 +472,24 @@ class MaxVoiceEngine(
         }
     }
 
+    fun updateFishAudioKey(key: String) {
+        _settings.value = _settings.value.copy(fishAudioApiKey = key.trim())
+        _settings.value.save(context)
+    }
+
+    fun updateFishAudioVoiceId(voiceId: String) {
+        _settings.value = _settings.value.copy(fishAudioVoiceId = voiceId.trim())
+        _settings.value.save(context)
+    }
+
+    fun updateUseNeuralCloudVoice(use: Boolean) {
+        _settings.value = _settings.value.copy(useNeuralCloudVoice = use)
+        _settings.value.save(context)
+    }
+
     override fun shutdown() {
         stop()
+        fishAudioService.stop()
         tts?.shutdown()
         tts = null
         isReady = false
