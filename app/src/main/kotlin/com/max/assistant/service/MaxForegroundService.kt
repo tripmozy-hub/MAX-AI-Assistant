@@ -182,6 +182,9 @@ class MaxForegroundService : Service() {
     val workspaceUiState: StateFlow<com.max.assistant.workspace.WorkspaceUiState>
         get() = if (::workspaceManager.isInitialized) workspaceManager.workspaceState else MutableStateFlow(com.max.assistant.workspace.WorkspaceUiState()).asStateFlow()
 
+    lateinit var ecosystemClient: com.max.assistant.ecosystem.MaxEcosystemClient
+        private set
+
     fun publishActivityEvent(
         title: String,
         detail: String = "",
@@ -339,6 +342,31 @@ class MaxForegroundService : Service() {
             scope = serviceScope,
             videoSearchManager = com.max.assistant.workspace.MaxVideoSearchManager(this, aiBrain.aiProvider as? com.max.assistant.ai.GeminiAiProvider),
             researchEngine = researchEngine
+        )
+
+        ecosystemClient = com.max.assistant.ecosystem.MaxEcosystemClient(
+            context = this,
+            scope = serviceScope,
+            onExecuteRemoteCommand = { action, params ->
+                when (action) {
+                    "flashlight" -> {
+                        commandExecutor.setFlashlight(true, voiceEngine.settings.value.outputLanguage)
+                        "Flashlight turned on, Sir."
+                    }
+                    "screen_vision" -> {
+                        serviceScope.launch {
+                            screenVisionManager.analyzeScreenSnapshot("What is on screen?", voiceEngine.settings.value.outputLanguage)
+                        }
+                        "Screen vision initiated, Sir."
+                    }
+                    "open_app" -> {
+                        val app = params["appName"] ?: "Chrome"
+                        commandExecutor.openApplication(app, voiceEngine.settings.value.outputLanguage)
+                        "Opening $app on Android, Sir."
+                    }
+                    else -> "Action '$action' processed on Android, Sir."
+                }
+            }
         )
 
         speechManager = MaxSpeechManager(
@@ -688,6 +716,23 @@ class MaxForegroundService : Service() {
                 speakWithCoordination(wsReply, currentOutputLang)
                 conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, wsReply, currentOutputLang)
                 addLog("Workspace voice command processed: '$textToUse' -> $wsReply")
+                return
+            }
+        }
+
+        // Cross-Device Ecosystem Voice Commands (Phone to Laptop / Watch)
+        if (::ecosystemClient.isInitialized) {
+            val ecoReply = ecosystemClient.handleEcosystemVoiceCommand(textToUse, currentOutputLang)
+            if (ecoReply != null) {
+                publishActivityEvent(
+                    title = "Ecosystem Dispatch",
+                    detail = ecoReply,
+                    category = ActivityCategory.SYSTEM,
+                    status = EventStatus.SUCCESS
+                )
+                speakWithCoordination(ecoReply, currentOutputLang)
+                conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, ecoReply, currentOutputLang)
+                addLog("Ecosystem command: '$textToUse' -> $ecoReply")
                 return
             }
         }

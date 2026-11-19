@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
                     val defaultVisionFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(ScreenVisionUiState()) }
                     val defaultTelemetryFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(SystemTelemetryInfo()) }
                     val defaultWorkspaceFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(com.max.assistant.workspace.WorkspaceUiState()) }
+                    val defaultDevicesFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<com.max.assistant.ecosystem.ConnectedDevice>()) }
 
                     val assistantState by (speechManager?.assistantState ?: defaultStateFlow).collectAsState()
                     val rmsLevel by (speechManager?.rmsLevel ?: defaultRmsFlow).collectAsState()
@@ -185,6 +186,7 @@ class MainActivity : ComponentActivity() {
                     val screenVisionState by (service?.screenVisionUiState ?: defaultVisionFlow).collectAsState()
                     val systemTelemetry by (service?.systemTelemetry ?: defaultTelemetryFlow).collectAsState()
                     val workspaceState by (service?.workspaceUiState ?: defaultWorkspaceFlow).collectAsState()
+                    val connectedDevices by (service?.ecosystemClient?.connectedDevices ?: defaultDevicesFlow).collectAsState()
 
                     val conversationRepo = remember(service) {
                         service?.conversationRepo ?: com.max.assistant.ai.ConversationRepository.getInstance(this@MainActivity)
@@ -223,6 +225,7 @@ class MainActivity : ComponentActivity() {
                             screenVisionState = screenVisionState,
                             systemTelemetry = systemTelemetry,
                             workspaceState = workspaceState,
+                            connectedDevices = connectedDevices,
                             onToggleWorkspace = { service?.workspaceManager?.toggleWorkspaceVisibility() },
                             onCloseWorkspace = { service?.workspaceManager?.setWorkspaceVisible(false) },
                             onToggleCompactCore = { service?.workspaceManager?.toggleCompactCore() },

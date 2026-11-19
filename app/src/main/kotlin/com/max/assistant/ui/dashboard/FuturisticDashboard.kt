@@ -82,6 +82,7 @@ fun FuturisticDashboard(
     screenVisionState: ScreenVisionUiState = ScreenVisionUiState(),
     systemTelemetry: SystemTelemetryInfo = SystemTelemetryInfo(),
     workspaceState: WorkspaceUiState = WorkspaceUiState(),
+    connectedDevices: List<com.max.assistant.ecosystem.ConnectedDevice> = emptyList(),
     onToggleWorkspace: () -> Unit = {},
     onCloseWorkspace: () -> Unit = {},
     onToggleCompactCore: () -> Unit = {},
@@ -438,6 +439,34 @@ fun FuturisticDashboard(
                         )
                         Text(
                             text = "VISION ON",
+                            color = Color(0xFF00E5FF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Ecosystem Nodes indicator
+                val onlineNodes = connectedDevices.count { it.status == "online" }
+                if (onlineNodes > 0) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF00E5FF).copy(alpha = 0.12f))
+                            .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF00E676))
+                        )
+                        Text(
+                            text = "SYNC ($onlineNodes)",
                             color = Color(0xFF00E5FF),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,

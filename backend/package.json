@@ -1,0 +1,16 @@
+{
+  "name": "max-ai-backend",
+  "version": "2.3.0",
+  "description": "Central Intelligence & Cross-Device Ecosystem Server for MAX Personal AI Assistant",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "cors": "^2.8.5"
+  }
+}

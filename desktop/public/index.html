@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAX // UNIVERSAL PERSONAL AI WORKSTATION</title>
+  <style>
+    :root {
+      --bg: #02060c;
+      --panel: #06101d;
+      --panel-border: rgba(0, 229, 255, 0.25);
+      --cyan: #00e5ff;
+      --blue: #0052ff;
+      --green: #00e676;
+      --red: #ff5252;
+      --text: #e2e8f0;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; }
+    body { background: var(--bg); color: var(--text); overflow-x: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+    /* Top Navigation & Mode Switcher */
+    header {
+      background: rgba(6, 16, 29, 0.95);
+      border-bottom: 1px solid var(--panel-border);
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      backdrop-filter: blur(12px);
+      z-index: 100;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; letter-spacing: 2px; }
+    .brand .logo-orb { width: 14px; height: 14px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+    .brand span { color: var(--cyan); font-size: 11px; font-family: monospace; }
+    
+    .mode-switch {
+      display: flex;
+      background: #030812;
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 3px;
+    }
+    .mode-btn {
+      padding: 6px 16px;
+      border-radius: 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      border: none;
+      transition: all 0.2s;
+    }
+    .mode-btn.active { background: var(--cyan); color: #000; box-shadow: 0 0 12px rgba(0,229,255,0.4); }
+
+    .device-pills { display: flex; gap: 8px; }
+    .dev-pill {
+      font-size: 10px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dev-pill.online::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    /* Main Container */
+    main { flex: 1; position: relative; overflow: hidden; display: flex; }
+
+    /* ========================================================
+       MODE A: FULL JARVIS CINEMATIC WORKSPACE
+       ======================================================== */
+    #mode-jarvis {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0;
+      transition: opacity 0.3s;
+    }
+    .hud-left {
+      width: 340px;
+      border-right: 1px solid var(--panel-border);
+      background: rgba(3, 9, 18, 0.7);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+    .hud-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .hud-right {
+      width: 380px;
+      border-left: 1px solid var(--panel-border);
+      background: rgba(3, 9, 18, 0.7);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .glass-card {
+      background: rgba(6, 16, 29, 0.85);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      color: var(--cyan);
+      font-family: monospace;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Core Canvas */
+    #core-canvas { width: 440px; height: 440px; }
+    .hud-voice-status {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--cyan);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-family: monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Logs & Activity */
+    .activity-stream { font-family: monospace; font-size: 11px; display: flex; flex-direction: column; gap: 8px; }
+    .log-item { display: flex; gap: 8px; color: #94a3b8; }
+    .log-time { color: var(--cyan); }
+    .log-text { color: #f1f5f9; }
+
+    /* ========================================================
+       MODE B: PROFESSIONAL WORKBENCH
+       ======================================================== */
+    #mode-pro {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0; left: 0;
+    }
+    .pro-sidebar {
+      width: 260px;
+      background: #040912;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .pro-main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .pro-chat {
+      display: flex;
+      flex-direction: column;
+      background: #06101d;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+      max-height: 480px;
+    }
+    .msg-user { align-self: flex-end; background: #0b2238; border: 1px solid rgba(0,229,255,0.3); padding: 8px 14px; border-radius: 12px 12px 2px 12px; max-width: 80%; }
+    .msg-max { align-self: flex-start; background: #081322; border: 1px solid rgba(255,255,255,0.1); padding: 10px 14px; border-radius: 12px 12px 12px 2px; max-width: 85%; line-height: 1.5; }
+    .chat-input-bar {
+      display: flex;
+      padding: 10px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      background: #030813;
+      gap: 8px;
+    }
+    .chat-input {
+      flex: 1;
+      background: #071322;
+      border: 1px solid rgba(0,229,255,0.25);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .btn-send {
+      background: var(--cyan);
+      color: #000;
+      border: none;
+      padding: 0 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Automation & Device Control Buttons */
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .action-btn {
+      background: #081628;
+      border: 1px solid rgba(0,229,255,0.3);
+      color: var(--cyan);
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .action-btn:hover { background: var(--cyan); color: #000; box-shadow: 0 0 10px rgba(0,229,255,0.3); }
+
+    /* Task list */
+    .task-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px; }
+    .task-check { cursor: pointer; color: var(--cyan); }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-orb"></div>
+      <div>MAX <span>// WORKSTATION OS</span></div>
+    </div>
+
+    <!-- Mode Switcher -->
+    <div class="mode-switch">
+      <button id="btn-mode-jarvis" class="mode-btn active" onclick="switchMode('jarvis')">MODE A // JARVIS HUD</button>
+      <button id="btn-mode-pro" class="mode-btn" onclick="switchMode('pro')">MODE B // PROFESSIONAL</button>
+    </div>
+
+    <!-- Connected Device Status Pills -->
+    <div class="device-pills" id="device-pill-container">
+      <div class="dev-pill online" id="pill-phone">Galaxy S25 Ultra</div>
+      <div class="dev-pill online" id="pill-win">Windows Laptop</div>
+      <div class="dev-pill online" id="pill-watch">MAX Watch</div>
+    </div>
+  </header>
+
+  <!-- Main Canvas Container -->
+  <main>
+
+    <!-- MODE A: FULL JARVIS CINEMATIC WORKSPACE -->
+    <div id="mode-jarvis">
+      <!-- Left HUD Column -->
+      <aside class="hud-left">
+        <div class="glass-card">
+          <div class="card-title">TELEMETRY DIAGNOSTICS <span style="color:var(--green)">OPTIMAL</span></div>
+          <div style="font-size:12px; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between"><span>CPU Compute:</span><span id="tel-cpu">14%</span></div>
+            <div style="display:flex; justify-content:space-between"><span>Physical RAM:</span><span id="tel-ram">8.2 / 16.0 GB</span></div>
+            <div style="display:flex; justify-content:space-between"><span>Neural Engine:</span><span style="color:var(--cyan)">Gemini Connected</span></div>
+            <div style="display:flex; justify-content:space-between"><span>Network Latency:</span><span>14ms</span></div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">NATIVE WINDOWS AUTOMATION</div>
+          <div class="btn-grid">
+            <button class="action-btn" onclick="launchApp('notepad')">Notepad</button>
+            <button class="action-btn" onclick="launchApp('chrome')">Chrome</button>
+            <button class="action-btn" onclick="launchApp('studio')">Android Studio</button>
+            <button class="action-btn" onclick="launchApp('code')">VS Code</button>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">CROSS-DEVICE REMOTE CONTROL</div>
+          <div class="btn-grid">
+            <button class="action-btn" onclick="dispatchPhoneFlashlight()">Phone Flashlight</button>
+            <button class="action-btn" onclick="dispatchPhoneVision()">Screen Vision</button>
+            <button class="action-btn" onclick="queryWatchStatus()">Check Watch</button>
+            <button class="action-btn" onclick="sendTaskToEcosystem()">Sync Task</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center Holographic Core -->
+      <section class="hud-center">
+        <canvas id="core-canvas" width="440" height="440"></canvas>
+        <div class="hud-voice-status">
+          <div style="width:8px; height:8px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan)"></div>
+          <span id="core-status-text">JARVIS AI CORE ONLINE — STANDING BY FOR COMMAND, SIR</span>
+        </div>
+      </section>
+
+      <!-- Right Activity & Workspace Column -->
+      <aside class="hud-right">
+        <div class="glass-card" style="flex:1;">
+          <div class="card-title">LIVE ACTIVITY FEED <span id="clock" style="color:var(--muted)">12:00:00</span></div>
+          <div class="activity-stream" id="activity-logs">
+            <div class="log-item"><span class="log-time">13:15:02</span><span class="log-text">Central Ecosystem WebSocket established.</span></div>
+            <div class="log-item"><span class="log-time">13:15:03</span><span class="log-text">Synced context with Samsung Galaxy S25 Ultra.</span></div>
+            <div class="log-item"><span class="log-time">13:15:04</span><span class="log-text">Watch node registered (Wear OS).</span></div>
+            <div class="log-item"><span class="log-time">13:15:05</span><span class="log-text">Standing by at your service, Sir.</span></div>
+          </div>
+        </div>
+
+        <div class="glass-card">
+          <div class="card-title">SHARED TASKS & REMINDERS</div>
+          <div id="jarvis-task-list">
+            <div class="task-item"><span>Finish website deployment tonight</span><span class="task-check" onclick="toggleTask('task_1')">[OPEN]</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- MODE B: PROFESSIONAL PRODUCTIVITY WORKBENCH -->
+    <div id="mode-pro">
+      <aside class="pro-sidebar">
+        <div style="font-size:12px; font-weight:700; color:var(--cyan); letter-spacing:1px;">WORKSPACE NAVIGATOR</div>
+        <button class="action-btn" style="justify-content:flex-start;" onclick="runFileSearch('MAX')">Files: Search MAX Projects</button>
+        <button class="action-btn" style="justify-content:flex-start;" onclick="createFolder('MAX_Workspace_Exports')">Create Project Folder</button>
+        <button class="action-btn" style="justify-content:flex-start;" onclick="refreshTelemetry()">Refresh Hardware Metrics</button>
+        
+        <div style="margin-top:20px; font-size:11px; color:var(--muted); font-family:monospace;">REGISTERED NODES:</div>
+        <div id="pro-node-list" style="font-size:12px; display:flex; flex-direction:column; gap:6px;"></div>
+      </aside>
+
+      <section class="pro-main">
+        <!-- AI Chat Stream -->
+        <div class="pro-chat">
+          <div style="padding:10px 16px; background:#071220; border-bottom:1px solid rgba(255,255,255,0.08); font-size:12px; font-weight:700; color:var(--cyan)">
+            MAX SYNCHRONIZED INTELLIGENCE CONVERSATION
+          </div>
+          <div class="chat-messages" id="chat-messages">
+            <div class="msg-max">Good day, Sir. I am fully synchronized across your workstation, phone, and smartwatch. How may I assist your engineering today?</div>
+          </div>
+          <div class="chat-input-bar">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Type a command or ask MAX, Sir..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+            <button class="btn-send" onclick="sendChatMessage()">SEND</button>
+          </div>
+        </div>
+
+        <!-- System & File Search Panel -->
+        <div style="display:flex; flex-direction:column; gap:16px;">
+          <div class="glass-card">
+            <div class="card-title">NATIVE FILE DISCOVERY</div>
+            <input type="text" id="file-query" class="chat-input" style="width:100%; margin-bottom:8px;" placeholder="Search files (e.g. .apk, .kt, .md)..." onkeydown="if(event.key==='Enter') runFileSearch(this.value)">
+            <div id="file-results" style="font-size:11px; max-height:180px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title">REMOTE COMMAND AUDIT TRAIL</div>
+            <div id="pro-audit-logs" style="font-size:11px; font-family:monospace; max-height:160px; overflow-y:auto;"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <script>
+    // ========================================================
+    // Mode Switching Logic
+    // ========================================================
+    let currentMode = 'jarvis';
+    function switchMode(mode) {
+      currentMode = mode;
+      const jarvis = document.getElementById('mode-jarvis');
+      const pro = document.getElementById('mode-pro');
+      const btnJarvis = document.getElementById('btn-mode-jarvis');
+      const btnPro = document.getElementById('btn-mode-pro');
+
+      if (mode === 'jarvis') {
+        jarvis.style.display = 'flex';
+        pro.style.display = 'none';
+        btnJarvis.classList.add('active');
+        btnPro.classList.remove('active');
+      } else {
+        jarvis.style.display = 'none';
+        pro.style.display = 'flex';
+        btnJarvis.classList.remove('active');
+        btnPro.classList.add('active');
+      }
+    }
+
+    // Keyboard shortcut F2 to toggle modes
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'F2') {
+        switchMode(currentMode === 'jarvis' ? 'pro' : 'jarvis');
+      }
+    });
+
+    // ========================================================
+    // 3D Procedural Holographic Arc Reactor Canvas
+    // ========================================================
+    const canvas = document.getElementById('core-canvas');
+    const ctx = canvas.getContext('2d');
+    let angle = 0;
+
+    function render3DCore() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      angle += 0.02;
+
+      // Outer Ticks (360 compass ticks)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.strokeStyle = "rgba(0, 229, 255, 0.4)";
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 48; i++) {
+        const rad = (i * Math.PI) / 24;
+        const x1 = Math.cos(rad) * 170;
+        const y1 = Math.sin(rad) * 170;
+        const x2 = Math.cos(rad) * (i % 4 === 0 ? 155 : 162);
+        const y2 = Math.sin(rad) * (i % 4 === 0 ? 155 : 162);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Outer Rotating Arc 1 (Clockwise)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.strokeStyle = "#00e5ff";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 140, 0, Math.PI * 0.7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 140, Math.PI, Math.PI * 1.7);
+      ctx.stroke();
+      ctx.restore();
+
+      // Outer Rotating Arc 2 (Counter-Clockwise)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-angle * 1.3);
+      ctx.strokeStyle = "rgba(0, 82, 255, 0.7)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 115, Math.PI * 0.3, Math.PI * 0.9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 115, Math.PI * 1.2, Math.PI * 1.9);
+      ctx.stroke();
+      ctx.restore();
+
+      // Audio Waveform Neon Ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.strokeStyle = "#00e5ff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      const points = 32;
+      for (let i = 0; i <= points; i++) {
+        const rad = (i * 2 * Math.PI) / points;
+        const wave = Math.sin(rad * 4 + angle * 3) * 6;
+        const r = 85 + wave;
+        const x = Math.cos(rad) * r;
+        const y = Math.sin(rad) * r;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+
+      // Luminous Core Sphere Glow
+      const grad = ctx.createRadialGradient(cx, cy, 10, cx, cy, 55);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.3, '#00e5ff');
+      grad.addColorStop(0.7, '#0052ff');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 55, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Orbiting Telemetry Particles
+      for (let i = 0; i < 4; i++) {
+        const pRad = angle * (1.2 + i * 0.3) + (i * Math.PI) / 2;
+        const pR = 100 + Math.sin(angle * 2 + i) * 35;
+        const px = cx + Math.cos(pRad) * pR;
+        const py = cy + Math.sin(pRad) * pR;
+        ctx.fillStyle = i % 2 === 0 ? "#00e5ff" : "#ffffff";
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      requestAnimationFrame(render3DCore);
+    }
+    render3DCore();
+
+    // Live Clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
+    }, 1000);
+
+    // ========================================================
+    // WebSocket Integration with Central Backend
+    // ========================================================
+    let ws = null;
+    function initWebSocket() {
+      ws = new WebSocket('ws://localhost:8085/ws?deviceId=dev_laptop_win');
+      ws.onopen = () => {
+        console.log('[Desktop UI] Connected to Central Backend');
+        addLog('Connected to Central Ecosystem Backend.');
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          handleBackendMessage(msg);
+        } catch (_e) {}
+      };
+      ws.onclose = () => {
+        setTimeout(initWebSocket, 4000);
+      };
+    }
+    initWebSocket();
+
+    function handleBackendMessage(msg) {
+      if (msg.type === 'INITIAL_SNAPSHOT' || msg.type === 'DEVICE_LIST_UPDATED') {
+        updateDevicePills(msg.devices || []);
+      }
+      if (msg.type === 'NEW_CHAT_MESSAGE') {
+        appendChatMessage(msg.message);
+      }
+      if (msg.type === 'AUDIT_LOG_UPDATED') {
+        renderAuditLogs(msg.logs || []);
+      }
+    }
+
+    function addLog(text) {
+      const logs = document.getElementById('activity-logs');
+      const time = new Date().toTimeString().split(' ')[0];
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      div.innerHTML = `<span class="log-time">${time}</span><span class="log-text">${text}</span>`;
+      logs.prepend(div);
+    }
+
+    function appendChatMessage(msg) {
+      const chat = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = msg.role === 'MAX' ? 'msg-max' : 'msg-user';
+      div.innerText = msg.content;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function updateDevicePills(devices) {
+      const container = document.getElementById('device-pill-container');
+      const proNodeList = document.getElementById('pro-node-list');
+      container.innerHTML = '';
+      proNodeList.innerHTML = '';
+
+      devices.forEach(d => {
+        const pill = document.createElement('div');
+        pill.className = `dev-pill ${d.status === 'online' ? 'online' : ''}`;
+        pill.innerText = d.name;
+        container.appendChild(pill);
+
+        const proNode = document.createElement('div');
+        proNode.style.color = d.status === 'online' ? 'var(--green)' : 'var(--muted)';
+        proNode.innerText = `• ${d.name} (${d.platform}) — ${d.status}`;
+        proNodeList.appendChild(proNode);
+      });
+    }
+
+    // ========================================================
+    // Automation API Triggers
+    // ========================================================
+    async function launchApp(appName) {
+      addLog(`Executing local Windows launch: ${appName}...`);
+      const res = await fetch('/api/automation/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appName })
+      });
+      const data = await res.json();
+      addLog(data.message);
+    }
+
+    async function runFileSearch(query) {
+      addLog(`Searching local files for '${query}'...`);
+      const res = await fetch('/api/automation/search-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      const data = await res.json();
+      const resultsDiv = document.getElementById('file-results');
+      resultsDiv.innerHTML = '';
+      (data.files || []).forEach(f => {
+        const item = document.createElement('div');
+        item.style.padding = '4px 0';
+        item.innerHTML = `<span style="color:var(--cyan)">${f.name}</span> <span style="color:var(--muted)">(${Math.round(f.size/1024)} KB)</span>`;
+        resultsDiv.appendChild(item);
+      });
+      addLog(`Found ${(data.files || []).length} file matches, Sir.`);
+    }
+
+    async function createFolder(folderName) {
+      const res = await fetch('/api/automation/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName })
+      });
+      const data = await res.json();
+      addLog(data.message);
+    }
+
+    async function refreshTelemetry() {
+      const res = await fetch('/api/automation/health');
+      const data = await res.json();
+      document.getElementById('tel-cpu').innerText = `${data.cpuPercent}%`;
+      document.getElementById('tel-ram').innerText = `${Math.round(data.ramUsedMB/1024*10)/10} / ${Math.round(data.ramTotalMB/1024*10)/10} GB`;
+      addLog(`Telemetry refreshed: CPU ${data.cpuPercent}%, RAM ${data.ramPercent}%.`);
+    }
+
+    // Remote Command Dispatch
+    async function dispatchPhoneFlashlight() {
+      addLog('Dispatching remote command: Toggle Phone Flashlight...');
+      await fetch('http://localhost:8085/api/commands/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originDeviceId: 'dev_laptop_win',
+          targetDeviceId: 'dev_phone_s25',
+          action: 'flashlight'
+        })
+      });
+    }
+
+    async function dispatchPhoneVision() {
+      addLog('Dispatching remote command: Trigger Screen Vision on S25 Ultra...');
+      await fetch('http://localhost:8085/api/commands/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          originDeviceId: 'dev_laptop_win',
+          targetDeviceId: 'dev_phone_s25',
+          action: 'screen_vision'
+        })
+      });
+    }
+
+    async function queryWatchStatus() {
+      addLog('Querying connected MAX Smartwatch node status...');
+      const res = await fetch('http://localhost:8085/api/devices');
+      const devs = await res.json();
+      const watch = devs.find(d => d.platform === 'wearos');
+      addLog(`Smartwatch node: ${watch ? watch.name + ' (' + watch.status + ')' : 'Offline'}, Sir.`);
+    }
+
+    async function sendTaskToEcosystem() {
+      const title = prompt('Enter synchronized task/reminder, Sir:', 'Review MAX architecture report');
+      if (title) {
+        await fetch('http://localhost:8085/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title,
+            originDevice: 'dev_laptop_win',
+            assignedDevice: 'all'
+          })
+        });
+        addLog(`Task '${title}' synced across all personal devices, Sir.`);
+      }
+    }
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+
+      appendChatMessage({ role: 'USER', content: text });
+      addLog(`User Query: ${text}`);
+
+      const res = await fetch('http://localhost:8085/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderDevice: 'dev_laptop_win',
+          role: 'USER',
+          content: text,
+          triggerAi: true
+        })
+      });
+      const data = await res.json();
+      if (data.aiMessage) {
+        appendChatMessage(data.aiMessage);
+        addLog(`MAX Response: ${data.aiMessage.content.slice(0, 35)}...`);
+      }
+    }
+  </script>
+</body>
+</html>

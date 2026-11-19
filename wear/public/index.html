@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAX // WEAR OS SMARTWATCH</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --cyan: #00e5ff;
+      --blue: #0052ff;
+      --green: #00e676;
+      --text: #ffffff;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: #050b14;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Watch Frame Container */
+    .watch-case {
+      width: 380px;
+      height: 380px;
+      border-radius: 50%;
+      background: #111622;
+      border: 8px solid #232b38;
+      box-shadow: 0 0 30px rgba(0, 229, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.9);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .watch-display {
+      width: 350px;
+      height: 350px;
+      border-radius: 50%;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      text-align: center;
+      padding: 20px;
+      overflow: hidden;
+    }
+
+    /* Mode A: Mini Core */
+    #watch-mode-a {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+    }
+
+    #mini-core-canvas { width: 220px; height: 220px; cursor: pointer; }
+
+    .top-telemetry {
+      position: absolute;
+      top: 24px;
+      font-size: 11px;
+      color: var(--cyan);
+      font-family: monospace;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .top-telemetry::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    .bottom-controls {
+      position: absolute;
+      bottom: 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-voice {
+      background: rgba(0, 229, 255, 0.15);
+      border: 1px solid var(--cyan);
+      color: var(--cyan);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Mode B: Minimal Watch Face */
+    #watch-mode-b {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      position: absolute;
+    }
+
+    .digital-clock {
+      font-size: 44px;
+      font-weight: 900;
+      color: #ffffff;
+      font-family: -apple-system, sans-serif;
+      letter-spacing: 1px;
+    }
+    .date-str { font-size: 11px; color: var(--cyan); font-family: monospace; margin-top: -2px; }
+
+    .reminder-pill {
+      margin-top: 14px;
+      background: rgba(6, 16, 29, 0.9);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      border-radius: 14px;
+      padding: 6px 14px;
+      font-size: 10px;
+      color: #e2e8f0;
+      max-width: 240px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Controls beneath watch */
+    .test-actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 480px;
+    }
+    .action-chip {
+      background: #081628;
+      border: 1px solid rgba(0,229,255,0.4);
+      color: var(--cyan);
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .action-chip:hover { background: var(--cyan); color: #000; }
+  </style>
+</head>
+<body>
+
+  <!-- Physical Watch Housing -->
+  <div class="watch-case">
+    <div class="watch-display">
+
+      <!-- Top Telemetry -->
+      <div class="top-telemetry">MAX OS // 84% ⚡</div>
+
+      <!-- MODE A: MINI ARC REACTOR CORE -->
+      <div id="watch-mode-a">
+        <canvas id="mini-core-canvas" width="220" height="220" onclick="triggerWatchCoreTap()"></canvas>
+        <div class="bottom-controls">
+          <button class="btn-voice" onclick="toggleWatchMode()">SWITCH TO WATCH FACE</button>
+        </div>
+      </div>
+
+      <!-- MODE B: MINIMAL WATCH FACE -->
+      <div id="watch-mode-b">
+        <div class="date-str" id="watch-date">THURSDAY // NOV 19</div>
+        <div class="digital-clock" id="watch-time">12:45</div>
+        <div class="reminder-pill" id="watch-reminder">⚡ Next: Finish website tonight</div>
+        <div class="bottom-controls">
+          <button class="btn-voice" onclick="toggleWatchMode()">SWITCH TO MINI CORE</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Smartwatch Voice Assistant Triggers (Simulation) -->
+  <div class="test-actions">
+    <button class="action-chip" onclick="voiceCommand('MAX, tell my laptop to open Chrome')">🗣️ "Tell laptop to open Chrome"</button>
+    <button class="action-chip" onclick="voiceCommand('MAX, turn on my phone flashlight')">🗣️ "Turn on phone flashlight"</button>
+    <button class="action-chip" onclick="voiceCommand('MAX, what is my next reminder?')">🗣️ "What is my next reminder?"</button>
+    <button class="action-chip" onclick="voiceCommand('MAX, is my laptop online?')">🗣️ "Is my laptop online?"</button>
+  </div>
+
+  <div id="watch-status-banner" style="margin-top:12px; font-size:12px; color:var(--cyan); font-family:monospace;">
+    Wear OS Node Connected to Ecosystem
+  </div>
+
+  <script>
+    let watchMode = 'a';
+    function toggleWatchMode() {
+      watchMode = watchMode === 'a' ? 'b' : 'a';
+      document.getElementById('watch-mode-a').style.display = watchMode === 'a' ? 'flex' : 'none';
+      document.getElementById('watch-mode-b').style.display = watchMode === 'b' ? 'flex' : 'none';
+    }
+
+    // Mini Core Procedural Animation
+    const canvas = document.getElementById('mini-core-canvas');
+    const ctx = canvas.getContext('2d');
+    let ang = 0;
+
+    function renderMiniCore() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      ang += 0.03;
+
+      // Outer Ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 75, 0, Math.PI * 0.8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 75, Math.PI, Math.PI * 1.8);
+      ctx.stroke();
+      ctx.restore();
+
+      // Inner Counter Ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-ang * 1.4);
+      ctx.strokeStyle = 'rgba(0, 82, 255, 0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 58, 0, Math.PI * 1.2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Waveform Neon Ring
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i <= 24; i++) {
+        const rad = (i * 2 * Math.PI) / 24;
+        const wave = Math.sin(rad * 3 + ang * 4) * 4;
+        const r = 44 + wave;
+        const x = Math.cos(rad) * r;
+        const y = Math.sin(rad) * r;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+
+      // Luminous Center Bulb
+      const grad = ctx.createRadialGradient(cx, cy, 4, cx, cy, 30);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.3, '#00e5ff');
+      grad.addColorStop(0.7, '#0052ff');
+      grad.addColorStop(1, 'transparent');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 30, 0, Math.PI * 2);
+      ctx.fill();
+
+      requestAnimationFrame(renderMiniCore);
+    }
+    renderMiniCore();
+
+    // Clock updater
+    function updateClock() {
+      const now = new Date();
+      let hrs = now.getHours();
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      const ampm = hrs >= 12 ? 'PM' : 'AM';
+      hrs = hrs % 12 || 12;
+      document.getElementById('watch-time').innerText = `${hrs}:${mins}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function triggerWatchCoreTap() {
+      voiceCommand("MAX, what is my next reminder?");
+    }
+
+    // Smartwatch Cross-Device Voice Commands
+    async function voiceCommand(text) {
+      const banner = document.getElementById('watch-status-banner');
+      banner.innerText = `Watch: "${text}"...`;
+
+      const lower = text.toLowerCase();
+      if (lower.includes("open chrome")) {
+        // Dispatch to Laptop
+        await fetch('http://localhost:8085/api/commands/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            originDeviceId: 'dev_watch_wearos',
+            targetDeviceId: 'dev_laptop_win',
+            action: 'open_app',
+            params: { appName: 'chrome' }
+          })
+        });
+        banner.innerText = "Dispatched: Chrome launching on Laptop, Sir.";
+      } else if (lower.includes("phone flashlight")) {
+        // Dispatch to Phone
+        await fetch('http://localhost:8085/api/commands/dispatch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            originDeviceId: 'dev_watch_wearos',
+            targetDeviceId: 'dev_phone_s25',
+            action: 'flashlight'
+          })
+        });
+        banner.innerText = "Dispatched: Flashlight activated on Phone, Sir.";
+      } else if (lower.includes("next reminder")) {
+        const res = await fetch('http://localhost:8085/api/tasks');
+        const tasks = await res.json();
+        const pending = tasks.find(t => !t.completed);
+        banner.innerText = pending ? `Next reminder: "${pending.title}", Sir.` : "No pending reminders, Sir.";
+      } else if (lower.includes("laptop online")) {
+        const res = await fetch('http://localhost:8085/api/devices');
+        const devs = await res.json();
+        const laptop = devs.find(d => d.platform === 'windows');
+        banner.innerText = laptop && laptop.status === 'online' ? "Laptop is Online, Sir." : "Laptop is Offline, Sir.";
+      }
+    }
+  </script>
+</body>
+</html>

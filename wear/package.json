@@ -1,0 +1,15 @@
+{
+  "name": "max-smartwatch",
+  "version": "2.3.0",
+  "description": "MAX Universal Personal AI Assistant — Wear OS Smartwatch Client",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "cors": "^2.8.5"
+  }
+}
