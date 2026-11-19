@@ -473,6 +473,7 @@ class MaxForegroundService : Service() {
                 }
 
                 if (hasMicPerm) {
+                    setMuted(false)
                     speechManager.startListeningLoop()
                     addLog("MAX listening service active for Sir.")
                 } else {
@@ -1920,22 +1921,22 @@ class MaxForegroundService : Service() {
         val currentOutputLang = voiceEngine.settings.value.outputLanguage
         val msg = if (muted) {
             when (currentOutputLang) {
-                VoiceLanguage.BENGALI -> "আওয়াজ এবং মাইক্রোফোন বন্ধ করা হয়েছে, স্যার।"
-                VoiceLanguage.HINDI -> "आवाज़ और माइक्रोफ़ोन म्यूट कर दिए गए हैं, सर।"
-                VoiceLanguage.HINGLISH -> "Voice aur microphone mute kar diye gaye hain, Sir."
-                else -> "Voice and microphone muted, Sir."
+                VoiceLanguage.BENGALI -> "আওয়াজ বন্ধ করা হয়েছে, স্যার। আমি শুনছি।"
+                VoiceLanguage.HINDI -> "आवाज़ म्यूट कर दी गई है, सर। मैं सुन रहा हूँ।"
+                VoiceLanguage.HINGLISH -> "Voice mute kar di gayi hai, Sir. Main sun raha hoon."
+                else -> "Voice output muted, Sir. Microphone is still actively listening."
             }
         } else {
             when (currentOutputLang) {
-                VoiceLanguage.BENGALI -> "আওয়াজ এবং মাইক্রোফোন চালু করা হয়েছে, স্যার।"
-                VoiceLanguage.HINDI -> "आवाज़ और माइक्रोफ़ोन चालू कर दिए गए हैं, सर।"
-                VoiceLanguage.HINGLISH -> "Voice aur microphone unmute ho gaye hain, Sir."
-                else -> "Voice and microphone unmuted, Sir."
+                VoiceLanguage.BENGALI -> "আওয়াজ চালু করা হয়েছে, স্যার।"
+                VoiceLanguage.HINDI -> "आवाज़ चालू कर दी गई है, सर।"
+                VoiceLanguage.HINGLISH -> "Voice unmute ho gayi hai, Sir."
+                else -> "Voice unmuted, Sir."
             }
         }
         addLog(msg)
         conversationRepo.addMessage(com.max.assistant.ai.MessageRole.MAX, msg, currentOutputLang)
-        updateNotification(if (muted) "MAX is Muted (Tap to Unmute)" else "MAX Voice Assistant Active")
+        updateNotification(if (muted) "MAX Voice Muted (Listening...)" else "MAX Voice Assistant Active")
         if (!muted) {
             speakWithCoordination(msg, currentOutputLang)
         }

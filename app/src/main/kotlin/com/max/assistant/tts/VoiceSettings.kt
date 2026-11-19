@@ -26,16 +26,16 @@ enum class VoiceLanguage(val displayName: String, val locale: Locale, val recogn
 }
 
 data class VoiceSettings(
-    val inputLanguage: VoiceLanguage = VoiceLanguage.ENGLISH,
-    val outputLanguage: VoiceLanguage = VoiceLanguage.ENGLISH,
-    val pitch: Float = 0.83f,                       // Refined deep British baritone (JARVIS)
+    val inputLanguage: VoiceLanguage = VoiceLanguage.HINGLISH,
+    val outputLanguage: VoiceLanguage = VoiceLanguage.HINGLISH,
+    val pitch: Float = 0.82f,                       // Refined deep intelligent baritone (JARVIS)
     val speed: Float = 0.94f,                       // Calm, measured intelligent cadence (JARVIS)
     val wakeWordEnabled: Boolean = true,
     val allowShortWakeWord: Boolean = true,        // Prefer "MAX" and common matching variants by default
     val continuousListening: Boolean = true,
     val muteListeningBeep: Boolean = true,
-    val currentVoiceName: String = "JARVIS British Voice Matrix",
-    val engineStatusMessage: String = "JARVIS British Voice System Active"
+    val currentVoiceName: String = "JARVIS Hinglish Voice Matrix",
+    val engineStatusMessage: String = "JARVIS Hinglish Voice System Active"
 ) {
     companion object {
         private const val PREFS = "max_voice_settings"
@@ -47,32 +47,32 @@ data class VoiceSettings(
         private const val KEY_ALLOW_SHORT_WAKE = "allow_short_wake_word"
         private const val KEY_CONTINUOUS = "continuous_listening"
         private const val KEY_MUTE_BEEP = "mute_listening_beep"
-        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v5"
+        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v6_hinglish"
 
         fun load(context: Context): VoiceSettings {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-            // Auto-upgrade to JARVIS British voice if not yet migrated to v5
+            // Auto-upgrade to JARVIS Hinglish voice if not yet migrated to v6
             val isMigrated = p.getBoolean(KEY_JARVIS_VOICE_VER, false)
             if (!isMigrated) {
                 p.edit()
                     .putBoolean(KEY_JARVIS_VOICE_VER, true)
-                    .putString(KEY_INPUT_LANG, VoiceLanguage.ENGLISH.name)
-                    .putString(KEY_OUTPUT_LANG, VoiceLanguage.ENGLISH.name)
-                    .putFloat(KEY_PITCH, 0.83f)
+                    .putString(KEY_INPUT_LANG, VoiceLanguage.HINGLISH.name)
+                    .putString(KEY_OUTPUT_LANG, VoiceLanguage.HINGLISH.name)
+                    .putFloat(KEY_PITCH, 0.82f)
                     .putFloat(KEY_SPEED, 0.94f)
                     .apply()
                 return VoiceSettings(
-                    inputLanguage = VoiceLanguage.ENGLISH,
-                    outputLanguage = VoiceLanguage.ENGLISH,
-                    pitch = 0.83f,
+                    inputLanguage = VoiceLanguage.HINGLISH,
+                    outputLanguage = VoiceLanguage.HINGLISH,
+                    pitch = 0.82f,
                     speed = 0.94f
                 )
             }
 
-            val inLang = try { VoiceLanguage.valueOf(p.getString(KEY_INPUT_LANG, VoiceLanguage.ENGLISH.name) ?: VoiceLanguage.ENGLISH.name) } catch (e: IllegalArgumentException) { VoiceLanguage.ENGLISH }
-            val outLang = try { VoiceLanguage.valueOf(p.getString(KEY_OUTPUT_LANG, VoiceLanguage.ENGLISH.name) ?: VoiceLanguage.ENGLISH.name) } catch (e: IllegalArgumentException) { VoiceLanguage.ENGLISH }
-            val pitch = p.getFloat(KEY_PITCH, 0.83f)
+            val inLang = try { VoiceLanguage.valueOf(p.getString(KEY_INPUT_LANG, VoiceLanguage.HINGLISH.name) ?: VoiceLanguage.HINGLISH.name) } catch (e: IllegalArgumentException) { VoiceLanguage.HINGLISH }
+            val outLang = try { VoiceLanguage.valueOf(p.getString(KEY_OUTPUT_LANG, VoiceLanguage.HINGLISH.name) ?: VoiceLanguage.HINGLISH.name) } catch (e: IllegalArgumentException) { VoiceLanguage.HINGLISH }
+            val pitch = p.getFloat(KEY_PITCH, 0.82f)
             val speed = p.getFloat(KEY_SPEED, 0.94f)
             val wake = p.getBoolean(KEY_WAKE_WORD, true)
             val shortWake = p.getBoolean(KEY_ALLOW_SHORT_WAKE, true)

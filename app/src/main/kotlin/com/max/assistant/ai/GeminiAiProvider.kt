@@ -27,8 +27,8 @@ class GeminiAiProvider(
         private const val DEFAULT_MODEL = "gemini-flash-lite-latest"
         private const val FALLBACK_MODEL = "gemini-3.1-flash-lite"
         private const val SECONDARY_FALLBACK_MODEL = "gemini-flash-latest"
-        private const val GROQ_MODEL = "qwen/qwen3.8-27b"
-        private const val GROQ_FALLBACK_MODEL = "openai/gpt-oss-120b"
+        private const val GROQ_MODEL = "llama-3.3-70b-versatile"
+        private const val GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
     }
 
     override val providerName: String = "Google Gemini AI (Flash Lite) + Groq LPU Backup"

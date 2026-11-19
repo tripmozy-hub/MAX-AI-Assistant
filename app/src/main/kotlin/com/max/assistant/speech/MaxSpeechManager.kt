@@ -140,7 +140,7 @@ class MaxSpeechManager(
     var onUnmuteRequested: (() -> Unit)? = null
 
     private val restartListeningRunnable = Runnable {
-        if (isListeningLoopActive && !isPausedForSpeaking && !isPausedForProcessing && !isStopped && !isMuted && _assistantState.value != AssistantState.AWAITING_PIN) {
+        if (isListeningLoopActive && !isPausedForSpeaking && !isPausedForProcessing && !isStopped && _assistantState.value != AssistantState.AWAITING_PIN) {
             startListeningIntent()
         }
     }
@@ -485,39 +485,49 @@ class MaxSpeechManager(
                 busyErrorCount = 0
             }
 
-            // Recover from client error loop (code 5) by cleanly recreating recognizer
+            // Recover from client error (code 5): This is a standard cancel/settling event in Android.
+            // NEVER destroy or recreate the instance on ERROR_CLIENT as that breaks the Google Speech binder!
             if (error == SpeechRecognizer.ERROR_CLIENT) {
-                clientErrorCount++
-                if (clientErrorCount >= 2) {
-                    Log.w(TAG, "Recognizer client error loop detected ($clientErrorCount), rebuilding instance cleanly...")
-                    clientErrorCount = 0
-                    initializeRecognizer()
+                Log.d(TAG, "SpeechRecognizer ERROR_CLIENT (code 5) settling/cancel. Resuming cleanly without destruction.")
+                busyErrorCount = 0
+                clientErrorCount = 0
+                if (isListeningLoopActive && !isPausedForSpeaking && !isStopped) {
                     handler.postDelayed({
-                        if (isListeningLoopActive && !isPausedForSpeaking && !isMuted) {
-                            restartListening()
+                        if (isListeningLoopActive && !isPausedForSpeaking && !isStopped) {
+                            startListeningIntent()
                         }
-                    }, 800L)
-                    return
+                    }, 350L)
                 }
+                return
             } else {
                 clientErrorCount = 0
             }
 
-            if (isListeningLoopActive && !isStopped && !isMuted) {
-                // If background music is playing, do not rapid-fire restart in 50ms to prevent audio focus thrashing
+            if (isListeningLoopActive && !isStopped) {
+                // If background music is playing, do NOT cycle the speech recognizer in a rapid loop
+                // This prevents stealing audio focus and avoids pausing or stuttering the user's music!
                 val isMusicPlaying = audioManager?.isMusicActive == true
-                val delay = if (isMusicPlaying) {
-                    600L
-                } else {
-                    when (error) {
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 200L
-                        SpeechRecognizer.ERROR_CLIENT -> 200L
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 50L
-                        else -> 200L
-                    }
+                if (isMusicPlaying) {
+                    Log.d(TAG, "Background music actively playing: holding standby without cycling recognizer to prevent song pause.")
+                    handler.postDelayed({
+                        if (isListeningLoopActive && !isPausedForSpeaking && !isStopped) {
+                            // If music has paused or stopped, resume normal speech listening loop
+                            if (audioManager?.isMusicActive != true) {
+                                restartListening()
+                            }
+                        }
+                    }, 3000L)
+                    return
+                }
+
+                val delay = when (error) {
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 250L
+                    SpeechRecognizer.ERROR_CLIENT -> 350L
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 100L
+                    else -> 200L
                 }
                 handler.postDelayed({
-                    if (isListeningLoopActive && !isPausedForSpeaking && !isMuted && !isStopped) {
+                    if (isListeningLoopActive && !isPausedForSpeaking && !isStopped) {
                         restartListening()
                     }
                 }, delay)
@@ -761,17 +771,17 @@ class MaxSpeechManager(
                     // Only wake word spoken ("Hey MAX", "मैक्स"): acknowledge and await next command for 15s
                     triggerWakeWord()
                 }
-            } else if (continuousConversationMode && (isLikelyCommand(lower) || isValidUtterance(text))) {
-                // In continuous conversation mode: accept recognized commands and questions even without explicit wake-word prefix
-                Log.i(TAG, "Continuous conversation mode: accepting command without wake word: '$text'")
+            } else if (continuousConversationMode && isLikelyCommand(lower)) {
+                // In continuous conversation mode: accept recognized direct actionable commands even without explicit wake-word prefix
+                Log.i(TAG, "Continuous conversation mode: accepting verified command without wake word: '$text'")
                 cancelInactivityTimer()
                 _assistantState.value = AssistantState.PROCESSING
                 pauseListening()
                 onCommandReceived(text)
             } else {
-                // In Standby waiting for wake command: ignore background speech
+                // In Standby waiting for wake command: ignore ambient speech and non-command noise
                 Log.d(TAG, "Standby mode: waiting for wake command, ignoring: '$text'")
-                if (isListeningLoopActive && !isPausedForSpeaking && !isMuted) {
+                if (isListeningLoopActive && !isPausedForSpeaking) {
                     restartListening()
                 }
             }
@@ -1026,16 +1036,12 @@ class MaxSpeechManager(
     }
 
     private fun restartListening() {
-        if (!isListeningLoopActive || isPausedForSpeaking || isPausedForProcessing || isStopped || isMuted || _assistantState.value == AssistantState.AWAITING_PIN) return
+        if (!isListeningLoopActive || isPausedForSpeaking || isPausedForProcessing || isStopped || _assistantState.value == AssistantState.AWAITING_PIN) return
 
         handler.removeCallbacks(restartListeningRunnable)
         handler.post {
-            try {
-                speechRecognizer?.cancel()
-            } catch (e: Exception) {
-                Log.w(TAG, "Cancel recognizer: ${e.message}")
-            }
-            handler.postDelayed(restartListeningRunnable, 150L) // Crucial settling window for Android SpeechRecognizer IPC
+            // Settling window for Android SpeechRecognizer IPC without artificial cancel() which generates ERROR_CLIENT
+            handler.postDelayed(restartListeningRunnable, 100L)
         }
     }
 
@@ -1082,8 +1088,8 @@ class MaxSpeechManager(
     }
 
     private fun startListeningIntent(preferWakeWord: Boolean = true) {
-        if (!isListeningLoopActive || isPausedForSpeaking || isPausedForProcessing || isStopped || isMuted || _assistantState.value == AssistantState.AWAITING_PIN) {
-            Log.d(TAG, "startListeningIntent skipped: loopActive=$isListeningLoopActive, speaking=$isPausedForSpeaking, proc=$isPausedForProcessing, stopped=$isStopped, muted=$isMuted")
+        if (!isListeningLoopActive || isPausedForSpeaking || isPausedForProcessing || isStopped || _assistantState.value == AssistantState.AWAITING_PIN) {
+            Log.d(TAG, "startListeningIntent skipped: loopActive=$isListeningLoopActive, speaking=$isPausedForSpeaking, proc=$isPausedForProcessing, stopped=$isStopped")
             return
         }
 
@@ -1111,13 +1117,6 @@ class MaxSpeechManager(
             putExtra("android.speech.extra.ENABLE_BIASING_DEVICE_CONTEXT", true)
             putExtra("android.speech.extra.AUDIO_SOURCE", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 
-            // Music coexistence: do not request exclusive audio focus when background music is active
-            if (isMusicPlaying) {
-                putExtra("android.speech.extra.REQUEST_AUDIO_FOCUS", false)
-                putExtra("REQUEST_AUDIO_FOCUS", false)
-                putExtra("android.speech.extra.AUDIO_FOCUS_GAIN_TYPE", AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-            }
-
             // Absolute silence extras: suppress vendor & Google prompt tones
             putExtra("android.speech.extra.BEEP", false)
             putExtra("android.speech.extra.SPEECH_INPUT_BEEP_SUPPRESS", true)
@@ -1127,27 +1126,26 @@ class MaxSpeechManager(
             putExtra("sound", false)
 
             // Far-Field conversational endpointing: enables distant voice capture (3-5m) without clipping
-            // If music is actively playing, extend timeout window so recognizer doesn't cycle and pause playback
-            val completeSilence = if (isMusicPlaying) 8000L else if (isAwaitingCommand) 2400L else 2800L
-            val possiblyCompleteSilence = if (isMusicPlaying) 5000L else if (isAwaitingCommand) 1600L else 2000L
+            val completeSilence = if (isMusicPlaying) 12000L else if (isAwaitingCommand) 2400L else 2800L
+            val possiblyCompleteSilence = if (isMusicPlaying) 8000L else if (isAwaitingCommand) 1600L else 2000L
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, completeSilence)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyCompleteSilence)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 100L)
             putExtra("android.speech.extras.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 100L)
             putExtra("android.speech.extra.DICTATION_MODE", false)
 
-            // Multi-language recognition
+            // Multi-language recognition (using en-IN and hi-IN system packs for zero error 13)
             when (inputLanguage) {
-                VoiceLanguage.HINGLISH -> {
-                    // Hinglish: use hi-IN as primary + en-IN as additional for mixed speech
+                VoiceLanguage.HINGLISH, VoiceLanguage.AUTO -> {
+                    // Hinglish / Auto: blend hi-IN and en-IN for natural bilingual recognition in India
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US"))
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("hi-IN", "en-IN", "en-US", "en-GB"))
                 }
                 VoiceLanguage.HINDI -> {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "hi-IN"))
+                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "hi-IN", "en-US"))
                 }
                 VoiceLanguage.BENGALI -> {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "bn-IN")
@@ -1155,14 +1153,9 @@ class MaxSpeechManager(
                     putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-IN", "hi-IN", "bn-IN"))
                 }
                 VoiceLanguage.ENGLISH -> {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-GB")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
                     putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-GB", "en-US", "en-IN", "hi-IN"))
-                }
-                VoiceLanguage.AUTO -> {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-GB")
-                    putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf("en-GB", "hi-IN", "en-IN", "en-US", "bn-IN"))
                 }
             }
         }
@@ -1243,17 +1236,13 @@ class MaxSpeechManager(
         if (muted) {
             cancelAutoEndpoint()
             isAwaitingCommand = false
-            isPausedForProcessing = false
-            isPausedForSpeaking = false
             cancelInactivityTimer()
             _assistantState.value = AssistantState.MUTED
             _rmsLevel.value = 0f
-            _liveTranscript.value = "MAX is Muted"
-            handler.removeCallbacks(restartListeningRunnable)
-            handler.post {
-                try {
-                    speechRecognizer?.cancel()
-                } catch (_: Exception) {}
+            _liveTranscript.value = "Voice Muted (Say 'Unmute')"
+            // Keep microphone listening active so user can speak "unmute" or tap to interact
+            if (isListeningLoopActive && !isPausedForSpeaking && !isStopped) {
+                restartListening()
             }
         } else {
             _assistantState.value = if (isStopped) AssistantState.STOPPED else AssistantState.LISTENING_FOR_WAKE_WORD

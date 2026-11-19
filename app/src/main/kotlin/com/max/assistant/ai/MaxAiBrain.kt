@@ -356,22 +356,23 @@ class MaxAiBrain(
         }
 
         // 4. Mute / Unmute / Stop-speaking commands
-        val isExplicitUnmute = cleanLower == "unmute" || cleanLower == "unmute max" ||
+        val isExplicitUnmute = cleanLower == "unmute" || cleanLower == "unmute max" || cleanLower == "unmute voice" ||
+            cleanLower == "unmute yourself" || cleanLower == "unmute karo" ||
             cleanLower == "awaz chalu" || cleanLower == "awaz chalu karo" ||
             cleanLower == "आवाज़ चालू" || cleanLower == "आवाज़ चालू करो" ||
             cleanLower == "अनम्यूट" || cleanLower == "अनम्यूट करो" ||
             cleanLower == "কথা বলো" ||
-            Regex("(?:^|[\\s,:;.-])unmute(?:[\\s,:;.-]|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleanLower)
+            cleanLower.matches(Regex("^(?:hey\\s+max\\s+|ok\\s+max\\s+)?(?:please\\s+)?(?:unmute|unmute\\s+max|unmute\\s+voice|unmute\\s+yourself)$", RegexOption.IGNORE_CASE))
         if (isExplicitUnmute) {
             return BrainDecision.TriggerMute(false)
         }
 
         val isExplicitMute = cleanLower == "mute" || cleanLower == "mute max" || cleanLower == "mute voice" ||
-            cleanLower == "mute microphone" || cleanLower == "mute mic" ||
+            cleanLower == "mute yourself" || cleanLower == "mute karo" ||
             cleanLower == "म्यूट" || cleanLower == "म्यूट करो" ||
             cleanLower == "आवाज़ बंद करो" || cleanLower == "awaz band karo" ||
             cleanLower == "মিউট করো" ||
-            Regex("(?:^|[\\s,:;.-])mute(?:[\\s,:;.-]|$)", RegexOption.IGNORE_CASE).containsMatchIn(cleanLower)
+            cleanLower.matches(Regex("^(?:hey\\s+max\\s+|ok\\s+max\\s+)?(?:please\\s+)?(?:mute|mute\\s+max|mute\\s+voice|mute\\s+yourself)$", RegexOption.IGNORE_CASE))
         if (isExplicitMute) {
             return BrainDecision.TriggerMute(true)
         }
@@ -379,7 +380,7 @@ class MaxAiBrain(
         val isStopSpeaking = cleanLower == "chup" || cleanLower == "चुप" || cleanLower == "चुप रहो" || cleanLower == "शांत रहो" ||
             cleanLower == "be quiet" || cleanLower == "shut up" || cleanLower == "chup raho" || cleanLower == "shant raho" || cleanLower == "चुप हो जाओ"
         if (isStopSpeaking) {
-            return BrainDecision.TriggerStopMax
+            return BrainDecision.StopSpeaking
         }
 
         // 5. Flashlight / Torch Commands
