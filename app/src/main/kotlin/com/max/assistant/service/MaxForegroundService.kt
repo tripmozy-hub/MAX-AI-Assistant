@@ -530,8 +530,10 @@ class MaxForegroundService : Service() {
 
         // 1. Check if user is responding to an active confirmation request or interactive prompt
         val activePending = confirmationManager.pendingAction.value
-        val cleanCommand = command.replace(Regex("^(?i)(hey\\s+max|ok\\s+max|hello\\s+max|max|मैक्स|ম্যাক্স|হেই\\s+ম্যাক্স|হে\\s+ম্যাক্স)[,\\s:]*"), "")
-            .trim('\'', '"', '?', '!', '.', ',', ' ', ':', ';', '-')
+        val cleanCommand = command.replace(
+            Regex("^(?i)(hey\\s+max|ok\\s+max|hello\\s+max|max|hey\\s+jarvis|ok\\s+jarvis|hello\\s+jarvis|jarvis|मैक्स|जार्विस|ম্যাক্স|জার্ভিস|হেই\\s+ম্যাক্স|হে\\s+ম্যাক্স|হে\\s+जार्विस|হেই\\s+জার্ভিস)[,\\s:]*"),
+            ""
+        ).trim('\'', '"', '?', '!', '.', ',', ' ', ':', ';', '-')
         val textToUse = if (cleanCommand.isNotEmpty()) cleanCommand else command
         Log.i(TAG, "handleIncomingCommand: activePending=$activePending, textToUse='$textToUse'")
 

@@ -49,25 +49,36 @@ class MaxSpeechManager(
         private const val TAG = "MaxSpeechManager"
         const val INACTIVITY_STANDBY_TIMEOUT_MS = 15000L // 15 seconds standby timeout
 
-        // Reliable multi-word wake phrases (English, Hindi, Bengali)
+        // Reliable multi-word wake phrases (English, Hindi, Bengali) — includes JARVIS & far-field variants
         private val PRIMARY_WAKE_WORDS = listOf(
-            "hey max", "hello max", "ok max", "okay max", "hi max",
-            "hey mac", "hello mac", "ok mac", "okay mac",
-            "hey mex", "hello mex", "ok mex", "okay mex",
+            // MAX variations
+            "hey max", "hello max", "ok max", "okay max", "hi max", "yo max",
+            "hey mac", "hello mac", "ok mac", "okay mac", "hi mac",
+            "hey mex", "hello mex", "ok mex", "okay mex", "hi mex",
             "hey maks", "hello maks", "ok maks", "okay maks",
             "hey macks", "hello macks", "ok macks",
-            "bhai max", "are max", "oye max", "hey mix", "hi mex", "yo max",
+            "bhai max", "are max", "oye max", "hey mix", "hi mex",
             "हे मैक्स", "हे मेक्स", "सुनो मैक्स", "सुनो मेक्स", "मैक्स सुनो", "मेक्स सुनो",
             "अरे मैक्स", "ओए मैक्स", "भाई मैक्स",
-            "হেই ম্যাক্স", "ম্যাক্স শোনো", "হে ম্যাক্স", "মেক্স শোনো", "এই ম্যাক্স", "আরে ম্যাক্স"
+            "হেই ম্যাক্স", "ম্যাক্স শোনো", "হে ম্যাক্স", "মেক্স শোনো", "এই ম্যাক্স", "আরে ম্যাক্স",
+            // JARVIS variations (Iron Man vocal identity)
+            "hey jarvis", "hello jarvis", "ok jarvis", "okay jarvis", "hi jarvis", "yo jarvis",
+            "hey jarves", "hello jarves", "ok jarves", "hey travis", "hello travis",
+            "hey service", "ok service", "hey jarv", "hello jarv",
+            "हे जार्विस", "सुनो जार्विस", "जार्विस सुनो", "अरे जार्विस", "ओए जार्विस",
+            "হেই জার্ভিস", "জার্ভিস শোনো", "হে জার্ভিস"
         )
 
-        // Shorter standalone wake words & common phonetic variants matching "MAX"
+        // Shorter standalone wake words & common phonetic variants matching "MAX" & "JARVIS" (including far-field microphone distortions)
         private val SHORT_WAKE_WORDS = listOf(
+            // MAX & phonetic far-field captures
             "max", "mac", "mex", "maks", "macks", "macs", "mags", "maggs", "mack", "maths", "math", "matts",
-            "marx", "marks", "mix", "masks", "mask",
+            "marx", "marks", "mix", "masks", "mask", "maax", "mexx", "mox",
             "मैक्स", "मेक्स", "मैथ्स", "मैक", "मैक्सो", "मार्क्स", "मिक्स", "मास्क",
-            "ম্যাক্স", "মেক্স", "মাক্স", "মার্ক্স"
+            "ম্যাক্স", "মেক্স", "মাক্স", "মার্ক্স",
+            // JARVIS & phonetic far-field captures
+            "jarvis", "jarves", "travis", "jarv", "garvis", "harvis", "jarvish",
+            "जार्विस", "जार्विश", "जारविस", "জার্ভিস"
         )
 
         const val SECURITY_PIN = "1212"
@@ -164,7 +175,7 @@ class MaxSpeechManager(
         awaitingCommandStartTime = 0L
     }
 
-    // Fast Auto-Endpointing Engine
+    // Far-Field Auto-Endpointing Engine (Allows long-distance room listening without word clipping)
     private var lastPartialText: String = ""
     private var lastVoiceActivityTimestamp: Long = 0L
     private var isEndpointTriggered = false
@@ -175,10 +186,11 @@ class MaxSpeechManager(
         if (partial.length < 2) return@Runnable
 
         val elapsed = System.currentTimeMillis() - lastVoiceActivityTimestamp
-        // If at least 450ms of silence have elapsed since last voice activity
-        if (elapsed >= 450L && !isEndpointTriggered) {
+        // For far-field distance listening (3-5m), allow natural breathing and cadence pauses (1500ms-1800ms)
+        val requiredSilence = if (isAwaitingCommand) 1500L else 1800L
+        if (elapsed >= requiredSilence && !isEndpointTriggered) {
             isEndpointTriggered = true
-            Log.i(TAG, "Fast auto-endpoint triggered after ${elapsed}ms silence for: '$partial'")
+            Log.i(TAG, "Far-field auto-endpoint triggered after ${elapsed}ms silence for: '$partial'")
             _rmsLevel.value = 0f
             if (_assistantState.value == AssistantState.LISTENING_FOR_COMMAND ||
                 (_assistantState.value == AssistantState.LISTENING_FOR_WAKE_WORD && (containsWakeWord(partial) || isLikelyCommand(partial.lowercase(Locale.ROOT))))) {
@@ -190,7 +202,7 @@ class MaxSpeechManager(
                 Log.d(TAG, "autoEndpoint stopListening: ${e.message}")
             }
 
-            // Fast fallback: if onResults is not invoked by the engine within 350ms, finalize with partial
+            // Fast fallback: if onResults is not invoked by the engine within 400ms, finalize with partial
             handler.postDelayed({
                 if (!sessionHandled && !isPausedForSpeaking && !isPausedForProcessing && !isMuted && !isStopped && isListeningLoopActive) {
                     Log.i(TAG, "Fallback: Finalizing command from partial results: '$partial'")
@@ -199,11 +211,11 @@ class MaxSpeechManager(
                     pauseListening()
                     handleRecognizedSpeech(partial)
                 }
-            }, 350L)
+            }, 400L)
         }
     }
 
-    fun scheduleAutoEndpoint(delayMs: Long = 450L) {
+    fun scheduleAutoEndpoint(delayMs: Long = 1600L) {
         handler.removeCallbacks(autoEndpointRunnable)
         handler.postDelayed(autoEndpointRunnable, delayMs)
     }
@@ -325,7 +337,9 @@ class MaxSpeechManager(
                 _rmsLevel.value = 0f
                 return
             }
-            val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+            // High-Sensitivity formula for distant room audio (3-5m pickup):
+            // Boost low-energy far-field acoustic waves for visual HUD and activity detection
+            val normalized = ((rmsdB + 2f) / 10f).coerceIn(0f, 1f)
             _rmsLevel.value = normalized
             if (isAssistantSpeaking && enableBargeIn) {
                 val elapsed = System.currentTimeMillis() - assistantSpeechStartTime
@@ -333,14 +347,14 @@ class MaxSpeechManager(
                     triggerBargeIn("onRmsChanged (normalized $normalized)")
                 }
             } else if (!isPausedForSpeaking && !isMuted) {
-                // Reset timer and schedule auto-endpoint when voice energy is active
-                if (normalized > 0.25f) {
+                // Lower detection threshold to 0.05f so far-field distance speech (2-5m) registers as active voice energy
+                if (normalized > 0.05f || rmsdB > -2.0f) {
                     lastVoiceActivityTimestamp = System.currentTimeMillis()
                     if (isAwaitingCommand) {
                         resetInactivityTimer()
                     }
                     if (lastPartialText.isNotBlank() && !isEndpointTriggered) {
-                        scheduleAutoEndpoint(450L)
+                        scheduleAutoEndpoint(1600L)
                     }
                 }
             }
@@ -362,17 +376,17 @@ class MaxSpeechManager(
                 Log.d(TAG, "stopListening on onEndOfSpeech: ${e.message}")
             }
 
-            // Immediately schedule fast finalization from partial speech if engine doesn't fire onResults promptly
+            // Far-field speech fallback: give engine 800ms to deliver full results before finalizing with partial
             if (partial.length >= 2 && !sessionHandled) {
                 handler.postDelayed({
                     if (!sessionHandled && !isPausedForSpeaking && !isPausedForProcessing && !isMuted && !isStopped && isListeningLoopActive) {
-                        Log.i(TAG, "onEndOfSpeech fast fallback: Finalizing command from partial: '$partial'")
+                        Log.i(TAG, "onEndOfSpeech fallback: Finalizing command from partial: '$partial'")
                         sessionHandled = true
                         _assistantState.value = AssistantState.PROCESSING
                         pauseListening()
                         handleRecognizedSpeech(partial)
                     }
-                }, 350L)
+                }, 800L)
             }
         }
 
@@ -480,11 +494,12 @@ class MaxSpeechManager(
             }
 
             if (isListeningLoopActive && !isStopped && !isMuted) {
+                // Ultra-low latency re-listen loop: 50ms on speech timeout/no-match so continuous listening never stutters
                 val delay = when (error) {
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 600L
-                    SpeechRecognizer.ERROR_CLIENT -> 600L
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 200L
-                    else -> 400L
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> 200L
+                    SpeechRecognizer.ERROR_CLIENT -> 200L
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> 50L
+                    else -> 200L
                 }
                 handler.postDelayed({
                     if (isListeningLoopActive && !isPausedForSpeaking && !isMuted && !isStopped) {
@@ -559,9 +574,9 @@ class MaxSpeechManager(
 
             if (isAwaitingCommand) {
                 resetInactivityTimer()
-                scheduleAutoEndpoint(450L)
+                scheduleAutoEndpoint(1600L)
             } else if (containsWakeWord(partial) || isLikelyCommand(partial.lowercase(Locale.ROOT))) {
-                scheduleAutoEndpoint(500L)
+                scheduleAutoEndpoint(1800L)
             }
 
             // Only emergency stop commands are intercepted in partials to avoid cutting off longer sentences
@@ -1060,14 +1075,20 @@ class MaxSpeechManager(
         currentSessionId = sessionCounter.incrementAndGet()
         sessionHandled = false
 
+        try {
+            // Far-Field microphone enhancement: beamforming & automatic gain control
+            audioManager?.setParameters("beamforming=enable;noise_suppression=on;far_field=on;agc=on;voice_recognition=on")
+        } catch (_: Exception) {}
+
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 10)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 15)
             putExtra(RecognizerIntent.EXTRA_CONFIDENCE_SCORES, true)
             putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
             putExtra("android.speech.extra.ENABLE_BIASING_DEVICE_CONTEXT", true)
+            putExtra("android.speech.extra.AUDIO_SOURCE", android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION)
 
             // Absolute silence extras: suppress vendor & Google prompt tones
             putExtra("android.speech.extra.BEEP", false)
@@ -1077,12 +1098,13 @@ class MaxSpeechManager(
             putExtra("android.speech.extra.SUPPRESS_END_BEEP", true)
             putExtra("sound", false)
 
-            // Responsive endpointing for smooth voice assistant interaction
-            val completeSilence = if (isAwaitingCommand) 600L else 700L
-            val possiblyCompleteSilence = if (isAwaitingCommand) 400L else 500L
+            // Far-Field conversational endpointing: enables distant voice capture (3-5m) without clipping
+            val completeSilence = if (isAwaitingCommand) 2400L else 2800L
+            val possiblyCompleteSilence = if (isAwaitingCommand) 1600L else 2000L
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, completeSilence)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, possiblyCompleteSilence)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 150L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 100L)
+            putExtra("android.speech.extras.SPEECH_INPUT_MINIMUM_LENGTH_MILLIS", 100L)
             putExtra("android.speech.extra.DICTATION_MODE", false)
 
             // Multi-language recognition

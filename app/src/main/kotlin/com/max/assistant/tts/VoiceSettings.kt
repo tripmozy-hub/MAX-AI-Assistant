@@ -47,12 +47,12 @@ data class VoiceSettings(
         private const val KEY_ALLOW_SHORT_WAKE = "allow_short_wake_word"
         private const val KEY_CONTINUOUS = "continuous_listening"
         private const val KEY_MUTE_BEEP = "mute_listening_beep"
-        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v3"
+        private const val KEY_JARVIS_VOICE_VER = "jarvis_voice_v5"
 
         fun load(context: Context): VoiceSettings {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-            // Auto-upgrade to JARVIS British voice if not yet migrated to v3
+            // Auto-upgrade to JARVIS British voice if not yet migrated to v5
             val isMigrated = p.getBoolean(KEY_JARVIS_VOICE_VER, false)
             if (!isMigrated) {
                 p.edit()

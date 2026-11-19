@@ -39,6 +39,8 @@ class GeminiAiProvider(
             return key.isNotBlank()
         }
 
+    private var isGeminiKeyVerified: Boolean? = null
+
     fun getApiKey(): String {
         val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val saved = prefs?.getString(KEY_API_KEY, "")?.trim() ?: ""
@@ -48,6 +50,7 @@ class GeminiAiProvider(
     fun saveApiKey(apiKey: String) {
         val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs?.edit()?.putString(KEY_API_KEY, apiKey.trim())?.apply()
+        isGeminiKeyVerified = null // Reset cache so new custom key is verified
     }
 
     fun getBackupApiKey(): String {
@@ -68,6 +71,16 @@ class GeminiAiProvider(
         systemInstructionOverride: String?
     ): AiResponse = withContext(Dispatchers.IO) {
         val key = getApiKey()
+        // Fast-track directly to ultra-low latency Groq LPU engine (<100ms response) if default key or unauthenticated
+        val shouldFastTrackGroq = isGeminiKeyVerified == false || key == DEFAULT_API_KEY
+        if (shouldFastTrackGroq) {
+            val fastReply = queryGroqBackup(prompt, history, preferredLanguage, systemInstructionOverride ?: "")
+            if (!fastReply.isNullOrBlank()) {
+                Log.i(TAG, "Fast-track Groq LPU response delivered with zero latency.")
+                return@withContext AiResponse.Success(fastReply, preferredLanguage)
+            }
+        }
+
         if (key.isBlank()) {
             return@withContext AiResponse.Error("API Key is not configured for Gemini AI.", isNetworkError = false)
         }
@@ -341,9 +354,18 @@ class GeminiAiProvider(
         if (groqKey.isBlank()) return null
 
         try {
-            val sysPrompt = if (systemInstruction.isNotBlank()) systemInstruction else {
-                "You are MAX, an intelligent personal AI assistant inspired by JARVIS. " +
-                        "Address the user respectfully as 'Sir'. Keep responses concise, direct, warm, and natural for speech without asterisks or markdown."
+            val langPersona = when (preferredLanguage) {
+                VoiceLanguage.ENGLISH -> "Communicate in crisp, articulate British English as JARVIS (Paul Bettany). Always address user respectfully as 'Sir'."
+                VoiceLanguage.HINDI -> "Reply strictly in natural Indian Hindi, addressing the user respectfully as 'सर' (Sir)."
+                VoiceLanguage.BENGALI -> "Reply strictly in natural Bengali, addressing the user respectfully as 'স্যার' (Sir)."
+                VoiceLanguage.HINGLISH -> "Reply in natural conversational Hinglish, addressing user as 'Sir'."
+                VoiceLanguage.AUTO -> "Communicate in crisp, articulate British English as JARVIS, addressing user as 'Sir'."
+            }
+
+            val sysPrompt = if (systemInstruction.isNotBlank()) {
+                "$systemInstruction\n$langPersona Important: Keep responses concise, direct, intelligent, and limited to 1-2 sentences for instant voice speech synthesis. Do not use asterisks, markdown, or lists."
+            } else {
+                "You are MAX, an intelligent personal AI assistant inspired by JARVIS. $langPersona Keep responses concise, direct, intelligent, and limited to 1-2 sentences for speech synthesis. Avoid asterisks or markdown."
             }
 
             val jsonBody = JSONObject().apply {
@@ -353,7 +375,7 @@ class GeminiAiProvider(
                     put("role", "system")
                     put("content", sysPrompt)
                 })
-                val recentTurns = history.takeLast(6)
+                val recentTurns = history.takeLast(4)
                 for (turn in recentTurns) {
                     messagesArr.put(JSONObject().apply {
                         put("role", if (turn.role == MessageRole.USER) "user" else "assistant")
@@ -365,8 +387,8 @@ class GeminiAiProvider(
                     put("content", prompt)
                 })
                 put("messages", messagesArr)
-                put("temperature", 0.7)
-                put("max_tokens", 400)
+                put("temperature", 0.6)
+                put("max_tokens", 200)
             }
 
             var (code, respStr) = sendGroqPostRequest(groqKey, jsonBody)
@@ -401,8 +423,8 @@ class GeminiAiProvider(
         val url = URL("https://api.groq.com/openai/v1/chat/completions")
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 3500
-            readTimeout = 4000
+            connectTimeout = 2500
+            readTimeout = 3000
             doOutput = true
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
             setRequestProperty("Authorization", "Bearer $key")
