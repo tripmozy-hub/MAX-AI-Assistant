@@ -503,7 +503,7 @@ class MaxForegroundService : Service() {
     fun speakWithCoordination(
         text: String,
         targetLanguage: VoiceLanguage? = null,
-        listenForFollowUp: Boolean = false,
+        listenForFollowUp: Boolean = true,
         onDone: (() -> Unit)? = null
     ) {
         val langToUse = targetLanguage ?: voiceEngine.settings.value.outputLanguage

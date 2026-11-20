@@ -809,9 +809,22 @@ class MaxSpeechManager(
         // 2. Questions & Knowledge queries
         if (lower.startsWith("what") || lower.startsWith("who") || lower.startsWith("where") ||
             lower.startsWith("when") || lower.startsWith("how") || lower.startsWith("why") ||
+            lower.startsWith("tell") || lower.startsWith("explain") || lower.startsWith("search") ||
+            lower.startsWith("find") || lower.startsWith("play") || lower.startsWith("show") ||
+            lower.startsWith("can you") || lower.startsWith("could you") || lower.startsWith("please") ||
+            lower.startsWith("dhoondho") || lower.startsWith("dhundho") || lower.startsWith("dikhao") ||
+            lower.startsWith("batao") || lower.startsWith("kya aap") || lower.startsWith("kya tum") ||
             lower.contains("kya hai") || lower.contains("kaun hai") || lower.contains("kaha hai") ||
             lower.contains("क्या है") || lower.contains("कौन है") || lower.contains("कहाँ है") ||
             lower.contains("কি") || lower.contains("কে") || lower.contains("কোথায়")
+        ) return true
+
+        // 2b. Conversational greetings & status checks
+        if (lower.contains("how are you") || lower.contains("kaise ho") || lower.contains("kya haal") ||
+            lower.contains("haal chaal") || lower.contains("kemon acho") || lower.contains("sab theek") ||
+            lower.contains("namaste") || lower.contains("namaskar") || lower.contains("good morning") ||
+            lower.contains("good evening") || lower.contains("good night") || lower.contains("who are you") ||
+            lower.contains("kaun ho") || lower.contains("madad") || lower.contains("help")
         ) return true
 
         // 3. Status queries: battery, weather, time, network
@@ -976,11 +989,10 @@ class MaxSpeechManager(
         if (isMuted) {
             _assistantState.value = AssistantState.MUTED
             _rmsLevel.value = 0f
-            handler.removeCallbacks(restartListeningRunnable)
-            handler.post {
-                try {
-                    speechRecognizer?.cancel()
-                } catch (_: Exception) {}
+            isPausedForSpeaking = false
+            isPausedForProcessing = false
+            if (isListeningLoopActive && !isStopped && _assistantState.value != AssistantState.AWAITING_PIN) {
+                restartListening()
             }
             return
         }
@@ -995,6 +1007,11 @@ class MaxSpeechManager(
             if (isMuted) {
                 _assistantState.value = AssistantState.MUTED
                 _rmsLevel.value = 0f
+                isPausedForSpeaking = false
+                isPausedForProcessing = false
+                if (isListeningLoopActive && !isStopped && _assistantState.value != AssistantState.AWAITING_PIN) {
+                    restartListening()
+                }
                 return@postDelayed
             }
             isPausedForSpeaking = false
@@ -1008,7 +1025,7 @@ class MaxSpeechManager(
                 cancelInactivityTimer()
                 _assistantState.value = AssistantState.LISTENING_FOR_WAKE_WORD
             }
-            if (isListeningLoopActive && !isStopped && !isMuted && _assistantState.value != AssistantState.AWAITING_PIN) {
+            if (isListeningLoopActive && !isStopped && _assistantState.value != AssistantState.AWAITING_PIN) {
                 restartListening()
             }
         }, 500L)

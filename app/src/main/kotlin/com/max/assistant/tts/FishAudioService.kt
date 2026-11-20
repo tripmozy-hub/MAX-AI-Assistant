@@ -66,6 +66,10 @@ class FishAudioService(
                     playAudioFile(cacheFile, onSpeechStarted, onSpeechFinished, onFallbackRequired)
                 }
             } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) {
+                    Log.d(TAG, "Fish Audio coroutine cancelled cleanly.")
+                    return@launch
+                }
                 Log.w(TAG, "Fish Audio synthesis error: ${e.message}")
                 withContext(Dispatchers.Main) { onFallbackRequired() }
             }
@@ -103,10 +107,16 @@ class FishAudioService(
                 conn.inputStream.use { input ->
                     FileOutputStream(tempFile).use { output ->
                         input.copyTo(output)
+                        output.flush()
                     }
                 }
                 if (tempFile.length() > 500) {
-                    tempFile.renameTo(destFile)
+                    if (destFile.exists()) destFile.delete()
+                    val renamed = tempFile.renameTo(destFile)
+                    if (!renamed) {
+                        tempFile.copyTo(destFile, overwrite = true)
+                        tempFile.delete()
+                    }
                     Log.i(TAG, "Fish Audio synthesized successfully: ${destFile.length()} bytes for: '${text.take(40)}'")
                     true
                 } else {
@@ -124,6 +134,19 @@ class FishAudioService(
         }
     }
 
+    private fun stopMediaPlayerOnly() {
+        try {
+            mediaPlayer?.let {
+                if (it.isPlaying) {
+                    it.stop()
+                }
+                it.reset()
+                it.release()
+            }
+        } catch (_: Exception) {}
+        mediaPlayer = null
+    }
+
     private fun playAudioFile(
         file: File,
         onSpeechStarted: (() -> Unit)?,
@@ -131,7 +154,7 @@ class FishAudioService(
         onFallbackRequired: () -> Unit
     ) {
         try {
-            stop()
+            stopMediaPlayerOnly()
             mediaPlayer = MediaPlayer().apply {
                 val attrs = AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ASSISTANT)
@@ -144,12 +167,12 @@ class FishAudioService(
                     onSpeechStarted?.invoke()
                 }
                 setOnCompletionListener {
-                    stop()
+                    stopMediaPlayerOnly()
                     onSpeechFinished?.invoke()
                 }
                 setOnErrorListener { _, what, extra ->
                     Log.w(TAG, "MediaPlayer error: what=$what, extra=$extra")
-                    stop()
+                    stopMediaPlayerOnly()
                     onFallbackRequired()
                     true
                 }
@@ -157,7 +180,7 @@ class FishAudioService(
             }
         } catch (e: Exception) {
             Log.w(TAG, "MediaPlayer play error: ${e.message}")
-            stop()
+            stopMediaPlayerOnly()
             onFallbackRequired()
         }
     }
@@ -165,16 +188,7 @@ class FishAudioService(
     fun stop() {
         currentSynthesisJob?.cancel()
         currentSynthesisJob = null
-        try {
-            mediaPlayer?.let {
-                if (it.isPlaying) {
-                    it.stop()
-                }
-                it.reset()
-                it.release()
-            }
-        } catch (_: Exception) {}
-        mediaPlayer = null
+        stopMediaPlayerOnly()
     }
 
     val isPlaying: Boolean
